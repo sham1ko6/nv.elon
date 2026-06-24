@@ -1,0 +1,4 @@
+# Never commit installed packages or secrets
+node_modules
+.env
+*.log

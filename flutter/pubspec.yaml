@@ -1,0 +1,25 @@
+name: nv_elon
+description: "nv.elon – Tech & Agriculture Classifieds for Uzbekistan."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  url_launcher: ^6.3.1
+  intl: ^0.19.0
+  http: ^1.2.2          # lets the app talk to our backend over HTTP
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
