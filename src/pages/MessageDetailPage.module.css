@@ -1,0 +1,180 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--c-card);
+  border-bottom: 1px solid var(--c-line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.backButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  color: var(--c-ink);
+}
+
+.contact {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.contactInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.status {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.phoneButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  color: var(--c-accent);
+}
+
+.chatArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  padding-bottom: 80px;
+}
+
+.dateSeparator {
+  align-self: center;
+  font-size: 11.5px;
+  color: var(--c-muted);
+  background: var(--c-line);
+  padding: 4px 12px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 4px;
+}
+
+.messageRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  gap: 4px;
+}
+
+.received {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.sent {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.bubble {
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.bubbleReceived {
+  background: var(--c-card);
+  color: var(--c-ink);
+  border-radius: 4px 16px 16px 16px;
+}
+
+.bubbleSent {
+  background: var(--c-accent);
+  color: #fff;
+  border-radius: 16px 4px 16px 16px;
+}
+
+.time {
+  font-size: 10px;
+  color: var(--c-muted);
+}
+
+.inputBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 430px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--c-card);
+  border-top: 1px solid var(--c-line);
+}
+
+.input {
+  flex: 1;
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-md);
+  background: var(--c-bg);
+  font-size: 14px;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--c-muted);
+}
+
+.input:focus {
+  border-color: var(--c-accent);
+}
+
+.sendButton {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

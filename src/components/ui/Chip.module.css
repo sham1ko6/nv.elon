@@ -1,0 +1,18 @@
+.chip {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: var(--c-card);
+  color: var(--c-muted);
+  border: 1px solid var(--c-line);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.active {
+  background: var(--c-accent);
+  color: #fff;
+  border-color: var(--c-accent);
+}
