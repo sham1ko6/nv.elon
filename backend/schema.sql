@@ -1,46 +1,11 @@
--- =============================================================
--- nv.elon — MySQL / MariaDB schema
--- =============================================================
--- HOW TO RUN (from a terminal):
---   mysql -u root -p < backend/db/schema.sql
---   mysql -u root -p < backend/db/seed.sql        (sample data, optional)
---
--- This file creates the whole database. The Phase 1 API only USES the
--- users, categories, subcategories and listings tables, but we create
--- every table now so the schema is stable and future phases (payments,
--- subscriptions) just plug in.
--- =============================================================
-
--- Create the database if it does not exist, then switch into it.
-CREATE DATABASE IF NOT EXISTS nv_elon
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE nv_elon;
-
--- Drop tables first so re-running this file gives a clean slate.
--- Order matters: drop children before parents (foreign keys).
-DROP TABLE IF EXISTS contact_events;
-DROP TABLE IF EXISTS favorites;
-DROP TABLE IF EXISTS payment_transactions;
-DROP TABLE IF EXISTS ad_orders;
-DROP TABLE IF EXISTS listing_images;
-DROP TABLE IF EXISTS listings;
-DROP TABLE IF EXISTS subscriptions;
-DROP TABLE IF EXISTS plans;
-DROP TABLE IF EXISTS subcategories;
-DROP TABLE IF EXISTS categories;
-DROP TABLE IF EXISTS app_settings;
-DROP TABLE IF EXISTS users;
-
 -- USERS -------------------------------------------------------------
--- One row per account. Buyers can browse without an account; people
--- register mainly to post ads (sellers) or to save/contact listings.
 CREATE TABLE users (
   id            BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   name          VARCHAR(120) NOT NULL,
-  phone         VARCHAR(20)  NOT NULL UNIQUE,        -- e.g. +998901234567
+  phone         VARCHAR(20)  NOT NULL UNIQUE,        -- +998...
   email         VARCHAR(160) UNIQUE,
-  password_hash VARCHAR(255),                        -- bcrypt hash (never the raw password)
-  role          ENUM('buyer','seller','admin') NOT NULL DEFAULT 'seller',
+  password_hash VARCHAR(255),                        -- bcrypt/argon2 (null if OTP-only)
+  role          ENUM('buyer','seller','admin') NOT NULL DEFAULT 'buyer',
   is_verified   BOOLEAN NOT NULL DEFAULT FALSE,
   status        ENUM('active','banned') NOT NULL DEFAULT 'active',
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -95,7 +60,6 @@ CREATE TABLE subscriptions (
 );
 
 -- LISTINGS ----------------------------------------------------------
--- The ads themselves. The public feed only shows status='active'.
 CREATE TABLE listings (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   user_id         BIGINT UNSIGNED NOT NULL,
@@ -118,10 +82,10 @@ CREATE TABLE listings (
   updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_listing_feed (status, expires_at, category_id),
   INDEX idx_listing_user (user_id),
-  FULLTEXT KEY ft_listing (title, description),             -- fast text search
-  FOREIGN KEY (user_id)         REFERENCES users(id),
-  FOREIGN KEY (category_id)     REFERENCES categories(id),
-  FOREIGN KEY (subcategory_id)  REFERENCES subcategories(id),
+  FULLTEXT KEY ft_listing (title, description),
+  FOREIGN KEY (user_id)        REFERENCES users(id),
+  FOREIGN KEY (category_id)    REFERENCES categories(id),
+  FOREIGN KEY (subcategory_id) REFERENCES subcategories(id),
   FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
 );
 
@@ -134,7 +98,6 @@ CREATE TABLE listing_images (
 );
 
 -- ORDERS + PAYMENTS -------------------------------------------------
--- The ONLY two revenue types: 'posting_fee' and 'subscription'.
 CREATE TABLE ad_orders (
   id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   user_id     BIGINT UNSIGNED NOT NULL,
@@ -158,12 +121,6 @@ CREATE TABLE payment_transactions (
   provider_txn_id VARCHAR(120) NULL,          -- Payme/Click transaction id
   state           VARCHAR(40) NOT NULL,       -- provider-specific lifecycle state
   amount          DECIMAL(12,2) NOT NULL,
-  -- Payme requires us to remember these timestamps (in milliseconds) and the
-  -- cancel reason, so we can answer its CheckTransaction/CancelTransaction calls.
-  create_time     BIGINT NOT NULL DEFAULT 0,
-  perform_time    BIGINT NOT NULL DEFAULT 0,
-  cancel_time     BIGINT NOT NULL DEFAULT 0,
-  reason          INT NULL,
   raw_payload     JSON NULL,                  -- last callback body for audit
   created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -171,7 +128,7 @@ CREATE TABLE payment_transactions (
   FOREIGN KEY (ad_order_id) REFERENCES ad_orders(id)
 );
 
--- ENGAGEMENT (free, analytics only — NEVER billed) ------------------
+-- ENGAGEMENT (free, analytics only) --------------------------------
 CREATE TABLE favorites (
   user_id    BIGINT UNSIGNED NOT NULL,
   listing_id BIGINT UNSIGNED NOT NULL,
@@ -181,7 +138,7 @@ CREATE TABLE favorites (
   FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
 );
 
-CREATE TABLE contact_events (
+CREATE TABLE contact_events (   -- "showed phone"/"called" tracking; NEVER billed
   id         BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   listing_id BIGINT UNSIGNED NOT NULL,
   viewer_id  BIGINT UNSIGNED NULL,
@@ -190,7 +147,7 @@ CREATE TABLE contact_events (
   FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
 );
 
--- SETTINGS (posting fee amount, etc.) -------------------------------
+-- SETTINGS (posting fee etc.) --------------------------------------
 CREATE TABLE app_settings (
   `key`   VARCHAR(60) PRIMARY KEY,            -- 'posting_fee_amount'
   `value` VARCHAR(255) NOT NULL

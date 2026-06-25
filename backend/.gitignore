@@ -2,3 +2,10 @@
 node_modules
 .env
 *.log
+
+# Build output
+dist
+coverage
+
+# Uploaded files (local disk storage)
+uploads
