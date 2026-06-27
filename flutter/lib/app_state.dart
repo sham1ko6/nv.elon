@@ -1,19 +1,37 @@
 // ============================================================
-// app_state.dart  –  app-wide state, now backed by the real API
+// app_state.dart  –  app-wide state
 // ============================================================
-// This holds the things the whole app needs to know: who is logged in,
-// the list of ads, and the current search/category filter. It used to use
-// fake in-memory data; now it calls the backend through ApiService.
-// ============================================================
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'api_service.dart';
 
 class AppState extends ChangeNotifier {
-  // The one object that talks to the backend.
   final ApiService _api = ApiService();
 
-  // ---------------- Auth ----------------
+  // ---------------- Initialisation ----------------
+
+  bool _initialized = false;
+  bool get initialized => _initialized;
+
+  // Called once from main() before runApp().
+  // Loads saved auth from disk, then kicks off background network fetches.
+  Future<void> init() async {
+    await _loadAuth();
+    // Guest-visible feed — fire and forget so app starts immediately.
+    loadListings();
+    if (_isLoggedIn) {
+      loadMyListings();
+      _syncFavorites();
+    }
+    _initialized = true;
+    notifyListeners();
+  }
+
+  // ---------------- Auth state ----------------
+
   bool _isLoggedIn = false;
   AppUser? _currentUser;
 
@@ -21,51 +39,59 @@ class AppState extends ChangeNotifier {
   AppUser? get currentUser => _currentUser;
 
   // ---------------- Listings ----------------
-  // Starts empty; filled from the backend after login (loadListings).
+
   List<Listing> _listings = [];
+  List<Listing> _myListings = [];
+  bool _listingsLoading = false;
+
   List<Listing> get listings => _listings;
+  List<Listing> get myListings => _myListings;
+  bool get listingsLoading => _listingsLoading;
   List<Listing> get favoriteListings =>
       _listings.where((l) => l.isFavorite).toList();
 
-  // ---------------- Filter state (still done on the device) ----------------
+  // ---------------- Filter state ----------------
+
   String _searchQuery = '';
   String _selectedCategoryId = '';
+  String _selectedSubcategoryId = '';
 
   String get searchQuery => _searchQuery;
   String get selectedCategoryId => _selectedCategoryId;
+  String get selectedSubcategoryId => _selectedSubcategoryId;
 
   List<Listing> get filteredListings {
     return _listings.where((l) {
       final matchesSearch = _searchQuery.isEmpty ||
           l.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           l.description.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesCategory =
+      final matchesCat =
           _selectedCategoryId.isEmpty || l.categoryId == _selectedCategoryId;
-      return matchesSearch && matchesCategory;
+      final matchesSub = _selectedSubcategoryId.isEmpty ||
+          l.subcategoryId == _selectedSubcategoryId;
+      return matchesSearch && matchesCat && matchesSub;
     }).toList();
   }
 
   // ---------------- Auth actions ----------------
-  // Both throw ApiException (with a readable message) if the server says no;
-  // the auth screen catches that and shows it to the user.
 
-  // login = phone OR email.
   Future<void> login(String login, String password) async {
     final data = await _api.login(login: login, password: password);
-    _applyAuth(data);
+    await _applyAuth(data);
     await loadListings();
+    loadMyListings();
+    _syncFavorites();
   }
 
   Future<void> register(
       String name, String phone, String email, String password) async {
     final data = await _api.register(
         name: name, phone: phone, email: email, password: password);
-    _applyAuth(data);
+    await _applyAuth(data);
     await loadListings();
   }
 
-  // Save the token + user info that the server returned on login/register.
-  void _applyAuth(Map<String, dynamic> data) {
+  Future<void> _applyAuth(Map<String, dynamic> data) async {
     _api.setToken(data['token'] as String?);
     final u = data['user'] as Map<String, dynamic>;
     final name = (u['name'] ?? '') as String;
@@ -76,31 +102,110 @@ class AppState extends ChangeNotifier {
       initials: name.isNotEmpty ? name.trim()[0].toUpperCase() : 'U',
     );
     _isLoggedIn = true;
+    await _saveAuth();
     notifyListeners();
   }
 
-  void logout() {
+  Future<void> logout() async {
     _isLoggedIn = false;
     _currentUser = null;
     _api.setToken(null);
     _listings = [];
+    _myListings = [];
+    await _clearAuth();
     notifyListeners();
+    loadListings(); // restore guest feed
+  }
+
+  Future<void> updateProfile(String name, String phone) async {
+    await _api.updateProfile(name: name, phone: phone);
+    final n = name.trim();
+    _currentUser = AppUser(
+      name: n,
+      phone: phone.trim(),
+      role: _currentUser?.role ?? 'seller',
+      initials: n.isNotEmpty ? n[0].toUpperCase() : 'U',
+    );
+    await _saveAuth();
+    notifyListeners();
+  }
+
+  // ---------------- Persistence (SharedPreferences) ----------------
+
+  static const _kToken = 'auth_token';
+  static const _kUser = 'auth_user';
+
+  Future<void> _saveAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kToken, _api.token ?? '');
+    if (_currentUser != null) {
+      await prefs.setString(
+          _kUser,
+          jsonEncode({
+            'name': _currentUser!.name,
+            'phone': _currentUser!.phone,
+            'role': _currentUser!.role,
+          }));
+    }
+  }
+
+  Future<void> _loadAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_kToken);
+    final userJson = prefs.getString(_kUser);
+    if (token != null && token.isNotEmpty && userJson != null) {
+      _api.setToken(token);
+      final u = jsonDecode(userJson) as Map<String, dynamic>;
+      final name = (u['name'] ?? '') as String;
+      _currentUser = AppUser(
+        name: name,
+        phone: (u['phone'] ?? '') as String,
+        role: (u['role'] ?? 'seller') as String,
+        initials: name.isNotEmpty ? name.trim()[0].toUpperCase() : 'U',
+      );
+      _isLoggedIn = true;
+    }
+  }
+
+  Future<void> _clearAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kToken);
+    await prefs.remove(_kUser);
   }
 
   // ---------------- Listing actions ----------------
 
-  // Fetch the live feed from the backend and show it.
   Future<void> loadListings() async {
-    final raw = await _api.getListings();
-    _listings = raw
-        .map((j) => Listing.fromJson(j as Map<String, dynamic>))
-        .toList();
+    _listingsLoading = true;
     notifyListeners();
+    try {
+      final raw = await _api.getListings();
+      // Preserve in-memory favorite state across refreshes.
+      final prevFavs = {for (final l in _listings) l.id: l.isFavorite};
+      _listings = raw
+          .map((j) => Listing.fromJson(j as Map<String, dynamic>))
+          .map((l) => l.copyWith(isFavorite: prevFavs[l.id] ?? false))
+          .toList();
+    } catch (_) {
+      // Keep whatever we already had — network may be offline.
+    } finally {
+      _listingsLoading = false;
+      notifyListeners();
+    }
   }
 
-  // Step 1 of posting: create the ad (as "pending payment") and return its
-  // order, e.g. { id, amount, currency }. The ad is NOT live yet — the user
-  // pays on the next screen, which is what publishes it.
+  Future<void> loadMyListings() async {
+    if (!_isLoggedIn) return;
+    try {
+      final raw = await _api.getMyListings();
+      _myListings =
+          raw.map((j) => Listing.fromJson(j as Map<String, dynamic>)).toList();
+      notifyListeners();
+    } catch (_) {
+      // Graceful degradation — show empty list if endpoint not available yet.
+    }
+  }
+
   Future<Map<String, dynamic>> createAd({
     required String title,
     required String description,
@@ -120,43 +225,88 @@ class AppState extends ChangeNotifier {
       contactPhone: contactPhone,
       publishMethod: 'posting_fee',
     );
-    return (resp['order'] as Map<String, dynamic>);
+    return resp['order'] as Map<String, dynamic>;
   }
 
-  // Step 2 (real): ask the backend for a Payme/Click "pay now" link.
-  Future<String> getPaymentUrl(int orderId, String provider) {
-    return _api.paymentInit(orderId, provider);
+  Future<void> uploadImages(
+      int listingId, List<({Uint8List bytes, String name})> images) async {
+    for (final img in images) {
+      await _api.uploadListingImage(listingId, img.bytes, img.name);
+    }
   }
 
-  // Step 2 (test mode): pretend the payment succeeded so the ad goes live,
-  // then refresh the feed. Used until real merchant accounts are connected.
+  Future<String> getPaymentUrl(int orderId, String provider) =>
+      _api.paymentInit(orderId, provider);
+
   Future<void> simulatePayment(int orderId) async {
     await _api.devPay(orderId);
     await loadListings();
   }
 
+  Future<List<dynamic>> getMyOrders() => _api.getMyOrders();
+
+  // ---------------- Favorites ----------------
+
+  // Load favorites from backend and mark matching listings.
+  Future<void> _syncFavorites() async {
+    if (!_isLoggedIn) return;
+    try {
+      final raw = await _api.getMyFavorites();
+      final favIds = raw.map((j) => j['id'].toString()).toSet();
+      _listings =
+          _listings.map((l) => l.copyWith(isFavorite: favIds.contains(l.id))).toList();
+      notifyListeners();
+    } catch (_) {
+      // Backend may not have favorites endpoint yet — fall back to local state.
+    }
+  }
+
+  void toggleFavorite(String id) async {
+    final idx = _listings.indexWhere((l) => l.id == id);
+    if (idx == -1) return;
+    final nowFav = !_listings[idx].isFavorite;
+    // Optimistic update
+    _listings[idx] = _listings[idx].copyWith(isFavorite: nowFav);
+    notifyListeners();
+    if (_isLoggedIn) {
+      try {
+        if (nowFav) {
+          await _api.addFavorite(id);
+        } else {
+          await _api.removeFavorite(id);
+        }
+      } catch (_) {
+        // Revert on API failure
+        _listings[idx] = _listings[idx].copyWith(isFavorite: !nowFav);
+        notifyListeners();
+      }
+    }
+  }
+
   // ---------------- Filter actions ----------------
+
   void setSearchQuery(String q) {
     _searchQuery = q;
     notifyListeners();
   }
 
+  // Toggle category filter; clears subcategory.
   void setCategory(String categoryId) {
     _selectedCategoryId = _selectedCategoryId == categoryId ? '' : categoryId;
+    _selectedSubcategoryId = '';
     notifyListeners();
   }
 
-  void toggleFavorite(String id) {
-    final idx = _listings.indexWhere((l) => l.id == id);
-    if (idx != -1) {
-      _listings[idx] =
-          _listings[idx].copyWith(isFavorite: !_listings[idx].isFavorite);
-      notifyListeners();
-    }
+  // Set category + subcategory together (from CategoriesScreen).
+  void setSubcategory(String categoryId, String subcategoryId) {
+    _selectedCategoryId = categoryId;
+    _selectedSubcategoryId =
+        _selectedSubcategoryId == subcategoryId ? '' : subcategoryId;
+    notifyListeners();
   }
 }
 
-// Provider widget so any child can access state via context.
+// Provider widget so any child can access AppState via context.
 class AppStateProvider extends InheritedNotifier<AppState> {
   const AppStateProvider({
     super.key,

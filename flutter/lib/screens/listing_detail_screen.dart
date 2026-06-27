@@ -4,20 +4,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart';
 import '../app_state.dart';
 import '../mock_data.dart';
+import '../models.dart';
 
 class ListingDetailScreen extends StatelessWidget {
   final String listingId;
   const ListingDetailScreen({super.key, required this.listingId});
 
-  String _formatPrice(double price, String currency) {
-    final priceInt = price.toInt();
-    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    final pStr = priceInt.toString().replaceAllMapped(reg, (m) => '${m[1]} ');
-    return '$pStr $currency';
-  }
+  String _formatPrice(double price, String currency) =>
+      Listing.formatPrice(price, currency);
 
   // A small round button (back / share / favorite) shown over the photo.
   Widget _circleButton({required IconData icon, required VoidCallback onTap, Color? iconColor}) {
@@ -332,20 +330,44 @@ class _CallSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(phone, style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.call_rounded, size: 18),
-              label: Text("Qo'ng'iroq qilish",
-                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success,
-                foregroundColor: AppColors.onPrimary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse('tel:$phone');
+                    if (await canLaunchUrl(uri)) launchUrl(uri);
+                  },
+                  icon: const Icon(Icons.call_rounded, size: 18),
+                  label: Text("Qo'ng'iroq",
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: AppColors.onPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse('sms:$phone');
+                    if (await canLaunchUrl(uri)) launchUrl(uri);
+                  },
+                  icon: const Icon(Icons.sms_rounded, size: 18),
+                  label: Text('Xabar',
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.onPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           TextButton(

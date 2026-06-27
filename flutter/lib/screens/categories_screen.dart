@@ -17,9 +17,9 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   String? _expandedId;
 
-  // Apply a category filter, then jump back to the Home feed.
-  void _openCategory(String categoryId) {
-    AppStateProvider.of(context).setCategory(categoryId);
+  // Apply category + subcategory filter, then jump back to the Home feed.
+  void _openCategory(String categoryId, String subcategoryId) {
+    AppStateProvider.of(context).setSubcategory(categoryId, subcategoryId);
     MainShellScope.of(context)?.goToTab(0);
   }
 
@@ -42,7 +42,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 physics: const BouncingScrollPhysics(),
                 itemCount: kCategories.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (ctx, i) {
                   final cat = kCategories[i];
                   final isExpanded = _expandedId == cat.id;
@@ -113,7 +113,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             final sub = e.value;
                             final isLast = e.key == cat.subcategories.length - 1;
                             return GestureDetector(
-                              onTap: () => _openCategory(cat.id),
+                              onTap: () => _openCategory(cat.id, sub.id),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                 decoration: BoxDecoration(

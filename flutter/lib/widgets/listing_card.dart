@@ -23,13 +23,7 @@ class ListingCard extends StatelessWidget {
     required this.onCallTap,
   });
 
-  // Turns 2650 into "2 650" with thin spaces between thousands.
-  String get _priceFormatted {
-    final priceInt = listing.price.toInt();
-    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    final pStr = priceInt.toString().replaceAllMapped(reg, (m) => '${m[1]} ');
-    return '$pStr ${listing.currency}';
-  }
+  String get _priceFormatted => listing.formattedPrice;
 
   @override
   Widget build(BuildContext context) {

@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: kCategories.length + 1,
-                    separatorBuilder: (_, __) => const SizedBox(width: 16),
+                    separatorBuilder: (_, _) => const SizedBox(width: 16),
                     itemBuilder: (ctx, i) {
                       final isAll = i == 0;
                       final cat = isAll ? null : kCategories[i - 1];
@@ -222,8 +222,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // ── Grid / empty state ──
-            if (filtered.isEmpty)
+            // ── Grid / loading / empty state ──
+            if (state.listingsLoading && state.listings.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    strokeWidth: 2.5,
+                  ),
+                ),
+              )
+            else if (filtered.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Padding(

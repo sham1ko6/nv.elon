@@ -9,16 +9,13 @@ import 'screens/splash_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_shell.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Force portrait orientation
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
-  // Transparent status bar with DARK icons (we now use a light background).
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -26,31 +23,23 @@ void main() {
     ),
   );
 
-  runApp(const NvElonApp());
+  // Restore saved token + user from disk, then kick off background fetches.
+  final appState = AppState();
+  await appState.init();
+
+  runApp(NvElonApp(appState: appState));
 }
 
-class NvElonApp extends StatefulWidget {
-  const NvElonApp({super.key});
-
-  @override
-  State<NvElonApp> createState() => _NvElonAppState();
-}
-
-class _NvElonAppState extends State<NvElonApp> {
-  final _appState = AppState();
-
-  @override
-  void dispose() {
-    _appState.dispose();
-    super.dispose();
-  }
+class NvElonApp extends StatelessWidget {
+  final AppState appState;
+  const NvElonApp({super.key, required this.appState});
 
   @override
   Widget build(BuildContext context) {
     return AppStateProvider(
-      state: _appState,
+      state: appState,
       child: ListenableBuilder(
-        listenable: _appState,
+        listenable: appState,
         builder: (ctx, _) {
           return MaterialApp(
             title: 'nv.elon',

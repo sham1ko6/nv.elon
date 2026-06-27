@@ -1,16 +1,13 @@
 // ============================================================
 // screens/payment_screen.dart  –  Choose Payme or Click, then pay
 // ============================================================
-// Shows what you're paying for, lets you pick a provider, and either opens
-// the real pay link (Payme/Click) or — until real merchant accounts exist —
-// completes the flow in "test mode". On success it returns `true` to the
-// previous screen so the ad shows as published.
-// ============================================================
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../app_theme.dart';
 import '../app_state.dart';
+import '../models.dart';
 import 'payment_success_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
@@ -31,45 +28,83 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  String _provider = 'payme'; // which provider card is selected
+  String _provider = 'payme';
   bool _busy = false;
+  bool _polling = false;
 
-  String get _amountText {
-    final n = widget.amount.toInt();
-    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    final s = n.toString().replaceAllMapped(reg, (m) => '${m[1]} ');
-    return '$s ${widget.currency}';
-  }
+  String get _amountText =>
+      Listing.formatPrice(widget.amount, widget.currency);
 
   void _err(String m) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(m), backgroundColor: AppColors.danger));
 
-  // Real payment: ask backend for the provider's pay link and open it.
+  // Real payment: open Payme/Click URL then poll for confirmation.
   Future<void> _payReal() async {
     setState(() => _busy = true);
     try {
-      final url = await AppStateProvider.of(context).getPaymentUrl(widget.orderId, _provider);
+      final url = await AppStateProvider.of(context)
+          .getPaymentUrl(widget.orderId, _provider);
       final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!ok) _err('To\'lov sahifasini ochib bo\'lmadi.');
-      // Note: the ad goes live when the provider confirms payment to our
-      // server (webhook). Real-time status polling can be added later.
+      if (!ok) {
+        if (mounted) _err("To'lov sahifasini ochib bo'lmadi.");
+        setState(() => _busy = false);
+        return;
+      }
+      // Poll for up to 2 minutes (40 × 3 s).
+      await _pollForPayment();
     } catch (e) {
-      if (mounted) _err(e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        _err(e.toString());
+        setState(() { _busy = false; _polling = false; });
+      }
     }
   }
 
-  // Test mode: pretend the payment succeeded so we can see the whole flow.
+  Future<void> _pollForPayment() async {
+    setState(() => _polling = true);
+    const maxAttempts = 40;
+    for (var i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      try {
+        final orders = await AppStateProvider.of(context).getMyOrders();
+        Map<String, dynamic>? order;
+        for (final o in orders) {
+          final m = o as Map<String, dynamic>;
+          if (m['id'] == widget.orderId) {
+            order = m;
+            break;
+          }
+        }
+        if (order != null && order['status'] == 'paid') {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+                builder: (_) =>
+                    PaymentSuccessScreen(adTitle: widget.adTitle)),
+          );
+          return;
+        }
+      } catch (_) {
+        // Ignore individual poll errors; keep trying.
+      }
+    }
+    // Timed out
+    if (mounted) {
+      _err("To'lov tasdiqlanmadi, qayta urinib ko'ring.");
+      setState(() { _busy = false; _polling = false; });
+    }
+  }
+
+  // Test mode: simulate payment so the ad activates immediately.
   Future<void> _payTest() async {
     setState(() => _busy = true);
     try {
       await AppStateProvider.of(context).simulatePayment(widget.orderId);
       if (!mounted) return;
-      // Replace this screen with the success screen. Its button then takes
-      // the user all the way back to the feed.
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => PaymentSuccessScreen(adTitle: widget.adTitle)),
+        MaterialPageRoute(
+            builder: (_) => PaymentSuccessScreen(adTitle: widget.adTitle)),
       );
     } catch (e) {
       if (mounted) {
@@ -100,21 +135,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text("E'lon joylash to'lovi",
-                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary)),
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, color: AppColors.textSecondary)),
                 const SizedBox(height: 6),
                 Text(_amountText,
                     style: GoogleFonts.outfit(
-                        fontSize: 30, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary)),
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(Icons.sell_outlined, size: 14, color: AppColors.textHint),
+                    const Icon(Icons.sell_outlined,
+                        size: 14, color: AppColors.textHint),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(widget.adTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary)),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12, color: AppColors.textSecondary)),
                     ),
                   ],
                 ),
@@ -125,12 +165,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
           Text("To'lov usulini tanlang",
               style: GoogleFonts.outfit(
-                  fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary)),
           const SizedBox(height: 12),
 
           _ProviderCard(
             name: 'Payme',
-            subtitle: 'Payme orqali to\'lov',
+            subtitle: "Payme orqali to'lov",
             color: const Color(0xFF33CCCC),
             selected: _provider == 'payme',
             onTap: () => setState(() => _provider = 'payme'),
@@ -138,7 +180,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           const SizedBox(height: 12),
           _ProviderCard(
             name: 'Click',
-            subtitle: 'Click orqali to\'lov',
+            subtitle: "Click orqali to'lov",
             color: const Color(0xFF00AEEF),
             selected: _provider == 'click',
             onTap: () => setState(() => _provider = 'click'),
@@ -146,39 +188,67 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
           const SizedBox(height: 28),
 
-          // ── Pay button ──
+          // ── Real payment button ──
           _GradientButton(
-            label: _busy ? '...' : "To'lash",
+            label: _polling
+                ? "To'lov kutilmoqda..."
+                : (_busy ? '...' : "To'lash"),
             busy: _busy,
             onTap: _busy ? null : _payReal,
           ),
-          const SizedBox(height: 12),
 
-          // ── Test-mode button (until real merchant accounts are connected) ──
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _payTest,
-            icon: const Icon(Icons.science_outlined, size: 18, color: AppColors.textSecondary),
-            label: Text('Test rejimi: to\'lovni simulyatsiya qilish',
-                style: GoogleFonts.outfit(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              side: const BorderSide(color: AppColors.border),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          // Polling spinner
+          if (_polling) ...[
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
+                const SizedBox(width: 10),
+                Text("To'lov tasdiqlanishi kutilmoqda...",
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12, color: AppColors.textSecondary)),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text('Haqiqiy to\'lov uchun merchant hisob ulanishi kerak.',
-                style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textHint)),
-          ),
+          ],
+
+          // ── Test-mode button (debug builds only) ──
+          if (kDebugMode) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _payTest,
+              icon: const Icon(Icons.science_outlined,
+                  size: 18, color: AppColors.textSecondary),
+              label: Text("Test rejimi: to'lovni simulyatsiya qilish",
+                  style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary)),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text('Haqiqiy to\'lov uchun merchant hisob ulanishi kerak.',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, color: AppColors.textHint)),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-// One selectable provider option.
 class _ProviderCard extends StatelessWidget {
   final String name;
   final String subtitle;
@@ -210,12 +280,14 @@ class _ProviderCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 46, height: 46,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.account_balance_wallet_rounded, color: color, size: 22),
+              child: Icon(Icons.account_balance_wallet_rounded,
+                  color: color, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -224,24 +296,29 @@ class _ProviderCard extends StatelessWidget {
                 children: [
                   Text(name,
                       style: GoogleFonts.outfit(
-                          fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary)),
                   const SizedBox(height: 2),
                   Text(subtitle,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textSecondary)),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11, color: AppColors.textSecondary)),
                 ],
               ),
             ),
-            // Selected indicator (filled purple circle when chosen)
             Container(
-              width: 22, height: 22,
+              width: 22,
+              height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: selected ? AppColors.primary : Colors.transparent,
                 border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.textHint, width: 2),
+                    color: selected ? AppColors.primary : AppColors.textHint,
+                    width: 2),
               ),
               child: selected
-                  ? const Icon(Icons.check_rounded, size: 14, color: AppColors.onPrimary)
+                  ? const Icon(Icons.check_rounded,
+                      size: 14, color: AppColors.onPrimary)
                   : null,
             ),
           ],
@@ -255,7 +332,8 @@ class _GradientButton extends StatelessWidget {
   final String label;
   final bool busy;
   final VoidCallback? onTap;
-  const _GradientButton({required this.label, required this.busy, required this.onTap});
+  const _GradientButton(
+      {required this.label, required this.busy, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +343,10 @@ class _GradientButton extends StatelessWidget {
         gradient: const LinearGradient(colors: AppColors.primaryGradient),
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
-          BoxShadow(color: AppColors.primary.withValues(alpha: 0.30), blurRadius: 14, offset: const Offset(0, 6)),
+          BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.30),
+              blurRadius: 14,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: ElevatedButton(
@@ -273,15 +354,20 @@ class _GradientButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
         ),
         child: busy
             ? const SizedBox(
-                width: 22, height: 22,
-                child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    color: AppColors.onPrimary, strokeWidth: 2))
             : Text(label,
                 style: GoogleFonts.outfit(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.onPrimary)),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onPrimary)),
       ),
     );
   }

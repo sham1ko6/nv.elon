@@ -1,11 +1,13 @@
 // ============================================================
 // models.dart  –  Data models for nv.elon
 // ============================================================
+import 'package:intl/intl.dart';
+
 class AppCategory {
   final String id;
   final String name;
   final String uzName;
-  final String icon; // emoji shorthand
+  final String icon;
   final List<AppSubcategory> subcategories;
 
   const AppCategory({
@@ -40,11 +42,12 @@ class Listing {
   final String location;
   final String phone;
   final String date;
-  final String colorTag; // hex-ish tag for card gradient
+  final String colorTag;
   final int views;
   final String sellerName;
   final bool isCompany;
   final String imageUrl;
+  final String status; // 'active' | 'pending' | 'expired'
   bool isFavorite;
 
   Listing({
@@ -63,14 +66,11 @@ class Listing {
     required this.sellerName,
     this.isCompany = false,
     this.imageUrl = '',
+    this.status = 'active',
     this.isFavorite = false,
   });
 
-  // Build a Listing from the JSON the backend sends. The backend uses
-  // slightly different field names (e.g. "category" instead of
-  // "categoryId"), so we translate them here in one place.
   factory Listing.fromJson(Map<String, dynamic> json) {
-    // price arrives as a string like "125000.00"; turn it into a number.
     final rawPrice = json['price'];
     final price = rawPrice is num
         ? rawPrice.toDouble()
@@ -86,16 +86,35 @@ class Listing {
       subcategoryId: json['subcategory'] ?? '',
       location: json['location'] ?? '',
       phone: json['contact_phone'] ?? '',
-      date: 'Yangi', // the feed sends a timestamp; we just label it simply
+      date: _parseDate(json['created_at']?.toString()),
       colorTag: json['category'] ?? '',
       views: json['views'] is int ? json['views'] : 0,
       sellerName: json['seller_name'] ?? '',
-      isCompany: false,
+      isCompany: json['is_company'] == true,
       imageUrl: json['image_url'] ?? '',
+      status: json['status'] ?? 'active',
     );
   }
 
-  Listing copyWith({bool? isFavorite}) {
+  // Parse ISO timestamp → Uzbek-friendly display string.
+  static String _parseDate(String? raw) {
+    if (raw == null || raw.isEmpty) return 'Yangi';
+    final dt = DateTime.tryParse(raw)?.toLocal();
+    if (dt == null) return 'Yangi';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final hm = DateFormat('HH:mm').format(dt);
+    if (day == today) return 'Bugun, $hm';
+    if (day == today.subtract(const Duration(days: 1))) return 'Kecha, $hm';
+    const months = [
+      'Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyu',
+      'Iyu', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek',
+    ];
+    return '${dt.day}-${months[dt.month - 1]}';
+  }
+
+  Listing copyWith({bool? isFavorite, String? status}) {
     return Listing(
       id: id,
       title: title,
@@ -112,17 +131,26 @@ class Listing {
       sellerName: sellerName,
       isCompany: isCompany,
       imageUrl: imageUrl,
+      status: status ?? this.status,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 
-  String get formattedPrice {
-    if (price >= 1000000) {
-      return '\$${(price / 1000000).toStringAsFixed(1)}M';
-    } else if (price >= 1000) {
-      return '\$${(price / 1000).toStringAsFixed(0)}K';
+  // Full price string used everywhere in the UI.
+  String get formattedPrice => Listing.formatPrice(price, currency);
+
+  static String formatPrice(double amount, String currency) {
+    if (currency == 'UZS') {
+      // Russian locale gives space-thousands: 125 000
+      final fmt = NumberFormat('#,##0', 'ru');
+      return "${fmt.format(amount.toInt())} so'm";
     }
-    return '\$${price.toStringAsFixed(0)}';
+    // Default: USD with comma-thousands
+    return NumberFormat.currency(
+      symbol: '\$',
+      locale: 'en_US',
+      decimalDigits: 0,
+    ).format(amount);
   }
 }
 

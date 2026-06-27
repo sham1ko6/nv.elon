@@ -1,11 +1,8 @@
 // ============================================================
 // api_service.dart  –  one place for all backend communication
 // ============================================================
-// This file is the ONLY part of the app that knows how to talk to the
-// backend server. Every screen goes through here. If the server address
-// ever changes, you only edit it in one spot (baseUrl below).
-// ============================================================
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
@@ -16,20 +13,11 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  // ---------------------------------------------------------
-  // The backend address.
-  //   • Running the app in Chrome or Linux desktop  -> localhost works.
-  //   • Running on an Android EMULATOR              -> use 10.0.2.2
-  //   • Running on a real phone                     -> use your PC's
-  //     network IP, e.g. http://192.168.1.50:4000
-  // For now we test in Chrome, so localhost is correct.
-  // ---------------------------------------------------------
-  static const String baseUrl = 'http://localhost:4000';
+  static const String baseUrl = 'https://nvelon-production.up.railway.app';
 
-  // After login/register we keep the token here and send it on requests
-  // that require being logged in (like posting an ad).
   String? _token;
   void setToken(String? t) => _token = t;
+  String? get token => _token;
 
   Map<String, String> _headers({bool auth = false}) {
     final h = {'Content-Type': 'application/json'};
@@ -37,9 +25,6 @@ class ApiService {
     return h;
   }
 
-  // A small helper that reads the server's reply. If the server returned
-  // an error, it pulls out the human-readable message and throws it so the
-  // screen can show it to the user.
   dynamic _decode(http.Response res) {
     final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
@@ -51,7 +36,6 @@ class ApiService {
 
   // ---------------- AUTH ----------------
 
-  // Returns { token, user }
   Future<Map<String, dynamic>> register({
     required String name,
     required String phone,
@@ -66,7 +50,6 @@ class ApiService {
     return _decode(res) as Map<String, dynamic>;
   }
 
-  // login = phone OR email. Returns { token, user }
   Future<Map<String, dynamic>> login({
     required String login,
     required String password,
@@ -81,15 +64,12 @@ class ApiService {
 
   // ---------------- LISTINGS ----------------
 
-  // Returns the raw list of listing maps from the feed.
   Future<List<dynamic>> getListings() async {
     final res = await http.get(Uri.parse('$baseUrl/listings'), headers: _headers());
     final data = _decode(res) as Map<String, dynamic>;
     return data['listings'] as List<dynamic>;
   }
 
-  // Create an ad. Returns the full server reply (includes the order id
-  // when paying by posting fee). Requires being logged in.
   Future<Map<String, dynamic>> createListing({
     required String title,
     required String description,
@@ -99,7 +79,7 @@ class ApiService {
     String? subcategory,
     String currency = 'USD',
     String? contactPhone,
-    required String publishMethod, // 'posting_fee' or 'subscription'
+    required String publishMethod,
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/listings'),
@@ -119,9 +99,85 @@ class ApiService {
     return _decode(res) as Map<String, dynamic>;
   }
 
+  Future<void> uploadListingImage(
+      int listingId, Uint8List imageBytes, String filename) async {
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/api/listings/$listingId/images'),
+    );
+    if (_token != null) req.headers['Authorization'] = 'Bearer $_token';
+    req.files.add(
+        http.MultipartFile.fromBytes('image', imageBytes, filename: filename));
+    final streamed = await req.send();
+    final res = await http.Response.fromStream(streamed);
+    _decode(res);
+  }
+
+  // ---------------- FAVORITES ----------------
+
+  Future<List<dynamic>> getMyFavorites() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/me/favorites'),
+      headers: _headers(auth: true),
+    );
+    final data = _decode(res) as Map<String, dynamic>;
+    return (data['favorites'] ?? data['listings'] ?? []) as List<dynamic>;
+  }
+
+  Future<void> addFavorite(String listingId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/listings/$listingId/favorite'),
+      headers: _headers(auth: true),
+    );
+    _decode(res);
+  }
+
+  Future<void> removeFavorite(String listingId) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/listings/$listingId/favorite'),
+      headers: _headers(auth: true),
+    );
+    _decode(res);
+  }
+
+  // ---------------- MY LISTINGS ----------------
+
+  Future<List<dynamic>> getMyListings() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/me/listings'),
+      headers: _headers(auth: true),
+    );
+    final data = _decode(res) as Map<String, dynamic>;
+    return (data['listings'] ?? []) as List<dynamic>;
+  }
+
+  // ---------------- ORDERS ----------------
+
+  Future<List<dynamic>> getMyOrders() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/me/orders'),
+      headers: _headers(auth: true),
+    );
+    final data = _decode(res) as Map<String, dynamic>;
+    return (data['orders'] ?? []) as List<dynamic>;
+  }
+
+  // ---------------- PROFILE ----------------
+
+  Future<void> updateProfile({String? name, String? phone}) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/me'),
+      headers: _headers(auth: true),
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (phone != null) 'phone': phone,
+      }),
+    );
+    _decode(res);
+  }
+
   // ---------------- PAYMENTS ----------------
-  // Ask the backend for a "pay now" link for an order, using the chosen
-  // provider ('payme' or 'click'). Returns the URL to open in a browser.
+
   Future<String> paymentInit(int orderId, String provider) async {
     final res = await http.post(
       Uri.parse('$baseUrl/payments/init'),
@@ -132,10 +188,9 @@ class ApiService {
     return data['paymentUrl'] as String;
   }
 
-  // ---------------- DEV-ONLY (fake payment) ----------------
-  // Mirrors the backend's dev route that pretends an order was paid, so
-  // the new ad becomes active. Replaced by real Payme/Click in Phase 3.
+  // Debug-only route: simulate payment success without a real transaction.
   Future<void> devPay(int orderId) async {
+    assert(kDebugMode, 'devPay must only be called in debug mode');
     final res = await http.post(
       Uri.parse('$baseUrl/dev/pay/$orderId'),
       headers: _headers(auth: true),
