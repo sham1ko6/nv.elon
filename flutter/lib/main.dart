@@ -45,6 +45,7 @@ class NvElonApp extends StatelessWidget {
             title: 'nv.elon',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            locale: appState.locale,
             initialRoute: '/splash',
             routes: {
               '/splash': (_) => const SplashScreen(),

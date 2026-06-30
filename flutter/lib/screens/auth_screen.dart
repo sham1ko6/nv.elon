@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_theme.dart';
 import '../app_state.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/custom_text_field.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -126,7 +127,7 @@ class _AuthScreenState extends State<AuthScreen>
                 style: GoogleFonts.outfit(
                     fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             const SizedBox(height: 4),
-            Text("O'zbekistonning zamonaviy bozori",
+            Text(AppLocalizations.of(context).appTagline,
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 28),
@@ -163,9 +164,9 @@ class _AuthScreenState extends State<AuthScreen>
                         unselectedLabelColor: AppColors.textSecondary,
                         labelStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
                         unselectedLabelStyle: GoogleFonts.outfit(fontSize: 13),
-                        tabs: const [
-                          Tab(text: 'Kirish'),
-                          Tab(text: "Ro'yxatdan o'tish"),
+                        tabs: [
+                          Tab(text: AppLocalizations.of(context).loginTab),
+                          Tab(text: AppLocalizations.of(context).registerTab),
                         ],
                       ),
                     ),
@@ -268,6 +269,7 @@ class _LoginTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       physics: const BouncingScrollPhysics(),
@@ -277,16 +279,16 @@ class _LoginTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomTextField(
-              label: 'Email yoki telefon',
+              label: l.emailOrPhoneLabel,
               hint: 'email@example.com',
               controller: emailCtrl,
               keyboardType: TextInputType.emailAddress,
               prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? 'Email yoki telefon kiriting' : null,
+              validator: (v) => (v == null || v.isEmpty) ? l.emailOrPhoneError : null,
             ),
             const SizedBox(height: 16),
             CustomTextField(
-              label: 'Parol',
+              label: l.passwordLabel,
               hint: '••••••••',
               controller: passCtrl,
               obscureText: obscure,
@@ -296,10 +298,10 @@ class _LoginTab extends StatelessWidget {
                 icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                     size: 18, color: AppColors.textHint),
               ),
-              validator: (v) => (v == null || v.length < 4) ? 'Parol kiriting' : null,
+              validator: (v) => (v == null || v.length < 4) ? l.passwordError : null,
             ),
             const SizedBox(height: 28),
-            _GradientButton(text: 'Kirish', loading: loading, onPressed: onSubmit),
+            _GradientButton(text: l.loginBtn, loading: loading, onPressed: onSubmit),
             const SizedBox(height: 20),
             _DemoHint(),
           ],
@@ -335,6 +337,7 @@ class _RegisterTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       physics: const BouncingScrollPhysics(),
@@ -344,20 +347,20 @@ class _RegisterTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomTextField(
-              label: "To'liq ism",
-              hint: 'Ism Familiya',
+              label: l.fullNameLabel,
+              hint: l.nameHint,
               controller: nameCtrl,
               prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? 'Ismingizni kiriting' : null,
+              validator: (v) => (v == null || v.isEmpty) ? l.nameError : null,
             ),
             const SizedBox(height: 14),
             CustomTextField(
-              label: 'Telefon raqam',
+              label: l.phoneLabel,
               hint: '+998 90 000 00 00',
               controller: phoneCtrl,
               keyboardType: TextInputType.phone,
               prefixIcon: const Icon(Icons.phone_outlined, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.length < 9) ? 'Telefon kiriting' : null,
+              validator: (v) => (v == null || v.length < 9) ? l.phoneError : null,
             ),
             const SizedBox(height: 14),
             CustomTextField(
@@ -366,12 +369,12 @@ class _RegisterTab extends StatelessWidget {
               controller: emailCtrl,
               keyboardType: TextInputType.emailAddress,
               prefixIcon: const Icon(Icons.email_outlined, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? 'Email kiriting' : null,
+              validator: (v) => (v == null || v.isEmpty) ? l.emailError : null,
             ),
             const SizedBox(height: 14),
             CustomTextField(
-              label: 'Parol',
-              hint: 'Kamida 6 ta belgi',
+              label: l.passwordLabel,
+              hint: l.passwordMinError,
               controller: passCtrl,
               obscureText: obscure,
               prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textHint),
@@ -380,10 +383,10 @@ class _RegisterTab extends StatelessWidget {
                 icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                     size: 18, color: AppColors.textHint),
               ),
-              validator: (v) => (v == null || v.length < 6) ? 'Kamida 6 ta belgi' : null,
+              validator: (v) => (v == null || v.length < 6) ? l.passwordMinError : null,
             ),
             const SizedBox(height: 28),
-            _GradientButton(text: "Ro'yxatdan o'tish", loading: loading, onPressed: onSubmit),
+            _GradientButton(text: l.registerBtn, loading: loading, onPressed: onSubmit),
           ],
         ),
       ),
@@ -394,6 +397,7 @@ class _RegisterTab extends StatelessWidget {
 class _DemoHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -407,7 +411,7 @@ class _DemoHint extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "Avval \"Ro'yxatdan o'tish\" orqali hisob yarating, keyin kiring.",
+              l.registerFirstHint,
               style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textSecondary),
             ),
           ),

@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'api_service.dart';
+import 'l10n/strings.dart';
+import 'mock_data.dart';
 
 class AppState extends ChangeNotifier {
   final ApiService _api = ApiService();
@@ -19,6 +21,7 @@ class AppState extends ChangeNotifier {
   // Called once from main() before runApp().
   // Loads saved auth from disk, then kicks off background network fetches.
   Future<void> init() async {
+    await _loadLocale();
     await _loadAuth();
     // Guest-visible feed — fire and forget so app starts immediately.
     loadListings();
@@ -27,6 +30,30 @@ class AppState extends ChangeNotifier {
       _syncFavorites();
     }
     _initialized = true;
+    notifyListeners();
+  }
+
+  // ---------------- Locale ----------------
+
+  static const _kLocale = 'app_locale';
+  Locale _locale = const Locale('uz');
+  Locale get locale => _locale;
+
+  Future<void> _loadLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString(_kLocale);
+    if (code != null) {
+      _locale = Locale(code);
+      S.setLanguage(code);
+    }
+  }
+
+  Future<void> setLocale(String langCode) async {
+    if (_locale.languageCode == langCode) return;
+    _locale = Locale(langCode);
+    S.setLanguage(langCode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLocale, langCode);
     notifyListeners();
   }
 
@@ -187,7 +214,8 @@ class AppState extends ChangeNotifier {
           .map((l) => l.copyWith(isFavorite: prevFavs[l.id] ?? false))
           .toList();
     } catch (_) {
-      // Keep whatever we already had — network may be offline.
+      // Network unavailable — fall back to bundled mock listings.
+      if (_listings.isEmpty) _listings = List.of(kMockListings);
     } finally {
       _listingsLoading = false;
       notifyListeners();

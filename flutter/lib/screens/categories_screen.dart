@@ -1,10 +1,11 @@
 // ============================================================
-// screens/categories_screen.dart  –  Light categories list
+// screens/categories_screen.dart  –  Category browser
 // ============================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_theme.dart';
 import '../app_state.dart';
+import '../l10n/app_localizations.dart';
 import '../mock_data.dart';
 import 'main_shell.dart';
 
@@ -17,7 +18,6 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   String? _expandedId;
 
-  // Apply category + subcategory filter, then jump back to the Home feed.
   void _openCategory(String categoryId, String subcategoryId) {
     AppStateProvider.of(context).setSubcategory(categoryId, subcategoryId);
     MainShellScope.of(context)?.goToTab(0);
@@ -25,6 +25,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -32,17 +33,20 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: Text("Bo'limlar",
-                  style: GoogleFonts.outfit(
-                      fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Text(l.categoriesTitle,
+                  style: GoogleFonts.playfairDisplay(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary)),
             ),
+            Container(height: 1, color: AppColors.border),
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 physics: const BouncingScrollPhysics(),
                 itemCount: kCategories.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (ctx, i) {
                   final cat = kCategories[i];
                   final isExpanded = _expandedId == cat.id;
@@ -54,22 +58,26 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: isExpanded ? color.withValues(alpha: 0.5) : AppColors.border),
+                          color: isExpanded
+                              ? color.withValues(alpha: 0.4)
+                              : AppColors.border),
                       boxShadow: kCardShadow,
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Column(
                       children: [
-                        // Header row (tap to expand)
+                        // Header row
                         GestureDetector(
-                          onTap: () => setState(() => _expandedId = isExpanded ? null : cat.id),
+                          onTap: () => setState(() =>
+                              _expandedId = isExpanded ? null : cat.id),
                           child: Container(
                             color: Colors.transparent,
                             padding: const EdgeInsets.all(14),
                             child: Row(
                               children: [
                                 Container(
-                                  width: 46, height: 46,
+                                  width: 46,
+                                  height: 46,
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                         colors: gradient,
@@ -77,30 +85,39 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                         end: Alignment.bottomRight),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: Icon(AppTheme.categoryIcon(cat.id),
-                                      color: AppColors.onPrimary, size: 22),
+                                  child: Center(
+                                    child: Text(cat.icon,
+                                        style:
+                                            const TextStyle(fontSize: 22)),
+                                  ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(cat.uzName,
-                                          style: GoogleFonts.outfit(
-                                              fontSize: 14,
+                                          style: GoogleFonts.inter(
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                               color: AppColors.textPrimary)),
                                       const SizedBox(height: 2),
-                                      Text(cat.name,
-                                          style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 11, color: AppColors.textSecondary)),
+                                      Text(
+                                          l.subcategoryCount(cat.subcategories.length),
+                                          style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              color: AppColors.textSecondary)),
                                     ],
                                   ),
                                 ),
                                 AnimatedRotation(
                                   turns: isExpanded ? 0.5 : 0,
-                                  duration: const Duration(milliseconds: 250),
-                                  child: const Icon(Icons.expand_more_rounded, color: AppColors.textHint),
+                                  duration:
+                                      const Duration(milliseconds: 250),
+                                  child: const Icon(
+                                      Icons.expand_more_rounded,
+                                      color: AppColors.textHint),
                                 ),
                               ],
                             ),
@@ -108,36 +125,46 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         ),
                         // Subcategories
                         if (isExpanded) ...[
-                          const Divider(height: 1, color: AppColors.border),
+                          Container(height: 1, color: AppColors.border),
                           ...cat.subcategories.asMap().entries.map((e) {
                             final sub = e.value;
-                            final isLast = e.key == cat.subcategories.length - 1;
+                            final isLast =
+                                e.key == cat.subcategories.length - 1;
                             return GestureDetector(
-                              onTap: () => _openCategory(cat.id, sub.id),
+                              onTap: () =>
+                                  _openCategory(cat.id, sub.id),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
                                 decoration: BoxDecoration(
                                   border: Border(
                                     bottom: BorderSide(
-                                        color: isLast ? Colors.transparent : AppColors.border),
+                                        color: isLast
+                                            ? Colors.transparent
+                                            : AppColors.border),
                                   ),
                                 ),
                                 child: Row(
                                   children: [
                                     Container(
-                                      width: 6, height: 6,
-                                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle),
                                     ),
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Text(sub.uzName,
-                                          style: GoogleFonts.plusJakartaSans(
+                                          style: GoogleFonts.inter(
                                               fontSize: 13,
-                                              fontWeight: FontWeight.w600,
+                                              fontWeight: FontWeight.w500,
                                               color: AppColors.textPrimary)),
                                     ),
-                                    const Icon(Icons.arrow_forward_ios_rounded,
-                                        size: 12, color: AppColors.textHint),
+                                    const Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        size: 12,
+                                        color: AppColors.textHint),
                                   ],
                                 ),
                               ),

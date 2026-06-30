@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #e9e0d0;
+  color: #241C15;
+}
+
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 0; height: 0; }

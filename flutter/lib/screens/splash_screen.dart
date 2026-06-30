@@ -29,8 +29,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 2200), () {
       if (!mounted) return;
-      final state = AppStateProvider.of(context);
-      Navigator.of(context).pushReplacementNamed(state.isLoggedIn ? '/home' : '/auth');
+      Navigator.of(context).pushReplacementNamed('/home');
     });
   }
 

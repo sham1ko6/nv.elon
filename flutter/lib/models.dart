@@ -46,6 +46,7 @@ class Listing {
   final int views;
   final String sellerName;
   final bool isCompany;
+  final bool isTop;
   final String imageUrl;
   final String status; // 'active' | 'pending' | 'expired'
   bool isFavorite;
@@ -65,6 +66,7 @@ class Listing {
     this.views = 0,
     required this.sellerName,
     this.isCompany = false,
+    this.isTop = false,
     this.imageUrl = '',
     this.status = 'active',
     this.isFavorite = false,
@@ -91,6 +93,7 @@ class Listing {
       views: json['views'] is int ? json['views'] : 0,
       sellerName: json['seller_name'] ?? '',
       isCompany: json['is_company'] == true,
+      isTop: json['is_top'] == true,
       imageUrl: json['image_url'] ?? '',
       status: json['status'] ?? 'active',
     );
@@ -130,6 +133,7 @@ class Listing {
       views: views,
       sellerName: sellerName,
       isCompany: isCompany,
+      isTop: isTop,
       imageUrl: imageUrl,
       status: status ?? this.status,
       isFavorite: isFavorite ?? this.isFavorite,

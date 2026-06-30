@@ -1,17 +1,12 @@
 // ============================================================
-// screens/main_shell.dart  –  Light bottom navigation (OLX-style)
-// ============================================================
-// Holds the 4 main tabs (Home, Categories, Favorites, Profile) and a raised
-// center "Post" button. The Post button opens the posting flow as its own
-// screen (which then leads to the payment screens).
-//
-// MainShellScope lets any child screen switch tabs (e.g. the Categories
-// screen jumps to Home after you pick a category).
+// screens/main_shell.dart  –  Premium bottom navigation
 // ============================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_theme.dart';
+import '../app_state.dart';
+import '../l10n/strings.dart';
 import 'home_screen.dart';
 import 'categories_screen.dart';
 import 'favorites_screen.dart';
@@ -64,10 +59,10 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// Lets descendant screens control the shell (switch tabs).
 class MainShellScope extends InheritedWidget {
   final void Function(int) goToTab;
-  const MainShellScope({super.key, required this.goToTab, required super.child});
+  const MainShellScope(
+      {super.key, required this.goToTab, required super.child});
 
   static MainShellScope? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<MainShellScope>();
@@ -80,15 +75,25 @@ class _BottomBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback onPost;
-  const _BottomBar({required this.currentIndex, required this.onTap, required this.onPost});
+  const _BottomBar(
+      {required this.currentIndex,
+      required this.onTap,
+      required this.onPost});
 
   @override
   Widget build(BuildContext context) {
+    // Depend on AppState so this rebuilds when locale changes.
+    AppStateProvider.of(context);
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
-        boxShadow: [BoxShadow(color: Color(0x0F101828), blurRadius: 12, offset: Offset(0, -2))],
+        boxShadow: [
+          BoxShadow(
+              color: Color(0x0E241C15),
+              blurRadius: 12,
+              offset: Offset(0, -2)),
+        ],
       ),
       child: SafeArea(
         top: false,
@@ -96,22 +101,61 @@ class _BottomBar extends StatelessWidget {
           height: 64,
           child: Row(
             children: [
-              _navItem(0, Icons.home_rounded, 'Asosiy'),
-              _navItem(1, Icons.grid_view_rounded, "Bo'limlar"),
-              _postButton(),
-              _navItem(2, Icons.favorite_rounded, 'Saralangan'),
-              _navItem(3, Icons.person_rounded, 'Kabinet'),
+              _NavItem(
+                index: 0,
+                icon: Icons.home_rounded,
+                label: S.get('navHome'),
+                current: currentIndex,
+                onTap: onTap,
+              ),
+              _NavItem(
+                index: 1,
+                icon: Icons.grid_view_rounded,
+                label: S.get('navCategories'),
+                current: currentIndex,
+                onTap: onTap,
+              ),
+              _PostBtn(onTap: onPost),
+              _NavItem(
+                index: 2,
+                icon: Icons.favorite_rounded,
+                label: S.get('navSaved'),
+                current: currentIndex,
+                onTap: onTap,
+              ),
+              _NavItem(
+                index: 3,
+                icon: Icons.person_rounded,
+                label: S.get('navProfile'),
+                current: currentIndex,
+                onTap: onTap,
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  // One ordinary tab (icon + small label, purple when selected).
-  Widget _navItem(int index, IconData icon, String label) {
-    final selected = currentIndex == index;
-    final color = selected ? AppColors.primaryDeep : AppColors.textHint;
+class _NavItem extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final String label;
+  final int current;
+  final ValueChanged<int> onTap;
+  const _NavItem({
+    required this.index,
+    required this.icon,
+    required this.label,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = current == index;
+    final color = selected ? AppColors.primary : AppColors.textHint;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -119,41 +163,58 @@ class _BottomBar extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 23, color: color),
-            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.primary.withValues(alpha: 0.10)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+            const SizedBox(height: 2),
             Text(label,
-                style: GoogleFonts.outfit(
+                style: GoogleFonts.inter(
                     fontSize: 10,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
                     color: color)),
           ],
         ),
       ),
     );
   }
+}
 
-  // The raised center button that opens the posting flow.
-  Widget _postButton() {
-    return Expanded(
-      child: Center(
-        child: GestureDetector(
-          onTap: onPost,
-          child: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: AppColors.primaryGradient),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 5)),
-              ],
-            ),
-            child: const Icon(Icons.add_rounded, color: AppColors.onPrimary, size: 28),
-          ),
+class _PostBtn extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PostBtn({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+              colors: AppColors.primaryGradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.40),
+                blurRadius: 14,
+                offset: const Offset(0, 5)),
+          ],
         ),
+        child: const Icon(Icons.add_rounded,
+            color: AppColors.onPrimary, size: 28),
       ),
     );
   }

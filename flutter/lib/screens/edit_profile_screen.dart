@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_theme.dart';
 import '../app_state.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/custom_text_field.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -56,33 +57,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Profilni tahrirlash')),
+      appBar: AppBar(title: Text(l.editProfileTitle)),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
           children: [
             CustomTextField(
-              label: "To'liq ism",
-              hint: 'Ism Familiya',
+              label: l.fullNameLabel,
+              hint: l.nameHint,
               controller: _nameCtrl,
               prefixIcon: const Icon(Icons.person_outline_rounded,
                   size: 18, color: AppColors.textHint),
               validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Ismingizni kiriting' : null,
+                  (v == null || v.trim().isEmpty) ? l.nameError : null,
             ),
             const SizedBox(height: 16),
             CustomTextField(
-              label: 'Telefon raqam',
+              label: l.phoneLabel,
               hint: '+998 90 000 00 00',
               controller: _phoneCtrl,
               keyboardType: TextInputType.phone,
               prefixIcon: const Icon(Icons.phone_outlined,
                   size: 18, color: AppColors.textHint),
               validator: (v) =>
-                  (v == null || v.trim().length < 9) ? 'Telefon kiriting' : null,
+                  (v == null || v.trim().length < 9) ? l.phoneError : null,
             ),
             const SizedBox(height: 28),
             Container(
@@ -112,8 +114,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         height: 22,
                         child: CircularProgressIndicator(
                             color: AppColors.onPrimary, strokeWidth: 2))
-                    : Text('Saqlash',
-                        style: GoogleFonts.outfit(
+                    : Text(l.saveBtn,
+                        style: GoogleFonts.inter(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: AppColors.onPrimary)),

@@ -1,5 +1,5 @@
 // ============================================================
-// widgets/custom_text_field.dart  –  Light input + dropdown
+// widgets/custom_text_field.dart  –  Input + dropdown (terracotta theme)
 // ============================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,14 +36,11 @@ class CustomTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
-          ),
-        ),
+        Text(label,
+            style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary)),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -52,10 +49,7 @@ class CustomTextField extends StatelessWidget {
           maxLines: maxLines,
           enabled: enabled,
           validator: validator,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            color: AppColors.textPrimary,
-          ),
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon,
@@ -86,23 +80,17 @@ class CustomDropdown extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
-          ),
-        ),
+        Text(label,
+            style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
           initialValue: value,
           items: items,
           onChanged: onChanged,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            color: AppColors.textPrimary,
-          ),
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
           decoration: const InputDecoration(),
           icon: const Icon(Icons.expand_more_rounded, color: AppColors.textHint),
           dropdownColor: AppColors.surface,
