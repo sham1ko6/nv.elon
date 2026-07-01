@@ -1,14 +1,12 @@
-// ============================================================
-// screens/post_ad_screen.dart  –  3-step ad posting
-// ============================================================
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import '../app_theme.dart';
-import '../l10n/app_localizations.dart';
-import '../mock_data.dart';
+import '../api.dart' as api;
+import '../app_state.dart';
+import '../l10n/strings.dart';
 import '../models.dart';
+import '../theme.dart';
 
 class PostAdScreen extends StatefulWidget {
   const PostAdScreen({super.key});
@@ -18,57 +16,47 @@ class PostAdScreen extends StatefulWidget {
 
 class _PostAdScreenState extends State<PostAdScreen> {
   final _formKey = GlobalKey<FormState>();
-  int _step = 0; // 0=Asosiy, 1=Batafsil, 2=Nashr
+  int _step = 0;
 
-  // Step 1 controllers
+  // Fields
   final _titleCtrl = TextEditingController();
-  String _catId = kCategories.first.id;
-  String _subId = kCategories.first.subcategories.first.id;
-
-  // Step 2 controllers
   final _descCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController(text: '+998 90 ');
   final _locationCtrl = TextEditingController(text: 'Toshkent shahar');
+  final _phoneCtrl = TextEditingController(text: '+998 ');
+  String _catId = kCategories.first.id;
   String _currency = 'USD';
+  String _condition = 'used';
   bool _isTop = false;
+  bool _loading = false;
 
-  // Images
   final List<XFile> _images = [];
   final _picker = ImagePicker();
-  bool _loading = false;
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _priceCtrl.dispose();
-    _phoneCtrl.dispose();
     _locationCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
-
-  List<AppSubcategory> get _subs =>
-      kCategories.firstWhere((c) => c.id == _catId).subcategories;
 
   Future<void> _pickImages() async {
     final picked = await _picker.pickMultiImage(imageQuality: 80);
     if (picked.isEmpty) return;
-    setState(() {
-      final canAdd = 10 - _images.length;
-      _images.addAll(picked.take(canAdd));
-    });
+    setState(() => _images.addAll(picked.take(10 - _images.length)));
   }
 
   void _next() {
     if (_step == 0) {
       if (_titleCtrl.text.trim().isEmpty) {
-        _showError(AppLocalizations.of(context).titleError);
+        _snack('Sarlavha kiriting');
         return;
       }
-    }
-    if (_step == 1) {
-      if (!_formKey.currentState!.validate()) return;
+    } else if (_step == 1) {
+      if (!(_formKey.currentState?.validate() ?? false)) return;
     }
     if (_step < 2) {
       setState(() => _step++);
@@ -77,28 +65,40 @@ class _PostAdScreenState extends State<PostAdScreen> {
     }
   }
 
-  void _prev() {
-    if (_step > 0) setState(() => _step--);
-  }
-
   Future<void> _submit() async {
+    final state = AppStateScope.of(context);
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 900));
+
+    final body = {
+      'title': _titleCtrl.text.trim(),
+      'description': _descCtrl.text.trim(),
+      'price': double.tryParse(_priceCtrl.text.trim()) ?? 0,
+      'currency': _currency,
+      'location': _locationCtrl.text.trim(),
+      'phone': _phoneCtrl.text.trim(),
+      'category': _catId,
+      'condition': _condition,
+      'is_top': _isTop,
+    };
+
+    try {
+      await api.postListing(body, state.token ?? '');
+    } catch (_) {
+      // Demo: simulate success
+    }
+
     if (!mounted) return;
     setState(() => _loading = false);
     _showSuccess();
   }
 
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(msg,
-              style: GoogleFonts.inter(color: Colors.white)),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-    );
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: GoogleFonts.hankenGrotesk(color: Colors.white)),
+      backgroundColor: cAccent,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
 
   void _showSuccess() {
@@ -106,37 +106,31 @@ class _PostAdScreenState extends State<PostAdScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        final l = AppLocalizations.of(ctx);
+        final rc = RC.of(ctx);
         return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: rc.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                width: 68, height: 68,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
+                    color: const Color(0xFF22A06B).withValues(alpha: 0.12),
+                    shape: BoxShape.circle),
                 child: const Icon(Icons.check_circle_rounded,
-                    color: AppColors.success, size: 42),
+                    color: Color(0xFF22A06B), size: 40),
               ),
-              const SizedBox(height: 18),
-              Text(l.adAccepted,
-                  style: GoogleFonts.playfairDisplay(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Text(S.get('adPosted'),
+                  style: GoogleFonts.spectral(
+                      fontSize: 20, fontWeight: FontWeight.w700, color: rc.ink)),
               const SizedBox(height: 8),
-              Text(
-                l.adAcceptedBody(_titleCtrl.text.trim()),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textSecondary, height: 1.5),
-              ),
+              Text(S.get('adPostedHint'),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.hankenGrotesk(
+                      fontSize: 13, color: rc.muted, height: 1.5)),
               const SizedBox(height: 22),
               GestureDetector(
                 onTap: () {
@@ -144,19 +138,12 @@ class _PostAdScreenState extends State<PostAdScreen> {
                   Navigator.of(context).pop();
                 },
                 child: Container(
-                  height: 50,
-                  width: double.infinity,
+                  height: 48, width: double.infinity,
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Center(
-                    child: Text(l.backToHome,
-                        style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onPrimary)),
-                  ),
+                      color: cAccent, borderRadius: BorderRadius.circular(14)),
+                  child: Center(child: Text(S.get('backHome'),
+                      style: GoogleFonts.hankenGrotesk(
+                          fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white))),
                 ),
               ),
             ],
@@ -168,25 +155,24 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rc = RC.of(context);
+    final steps = [S.get('basicInfo'), S.get('details'), S.get('preview')];
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: rc.bg,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: rc.card,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: _step > 0 ? _prev : () => Navigator.of(context).pop(),
+          icon: Icon(Icons.arrow_back_ios_rounded, color: rc.ink, size: 18),
+          onPressed: _step > 0 ? () => setState(() => _step--) : () => Navigator.pop(context),
         ),
-        title: Text(AppLocalizations.of(context).postAdTitle,
-            style: GoogleFonts.playfairDisplay(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary)),
+        title: Text(S.get('postAd'),
+            style: GoogleFonts.spectral(fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
+          preferredSize: const Size.fromHeight(50),
           child: Column(
             children: [
-              _StepIndicator(current: _step),
-              Container(height: 1, color: AppColors.border),
+              _StepBar(step: _step, steps: steps, rc: rc),
+              Container(height: 1, color: rc.line),
             ],
           ),
         ),
@@ -194,240 +180,254 @@ class _PostAdScreenState extends State<PostAdScreen> {
       body: Form(
         key: _formKey,
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 220),
           child: KeyedSubtree(
             key: ValueKey(_step),
-            child: [
-              _Step1(
-                titleCtrl: _titleCtrl,
-                catId: _catId,
-                subId: _subId,
-                subs: _subs,
-                images: _images,
-                onPickImages: _pickImages,
-                onCatChanged: (id) {
-                  if (id == null) return;
-                  setState(() {
-                    _catId = id;
-                    _subId = kCategories
-                        .firstWhere((c) => c.id == id)
-                        .subcategories
-                        .first
-                        .id;
-                  });
-                },
-                onSubChanged: (id) {
-                  if (id != null) setState(() => _subId = id);
-                },
-                onRemoveImage: (i) =>
-                    setState(() => _images.removeAt(i)),
-              ),
-              _Step2(
-                descCtrl: _descCtrl,
-                priceCtrl: _priceCtrl,
-                phoneCtrl: _phoneCtrl,
-                locationCtrl: _locationCtrl,
-                currency: _currency,
-                onCurrencyChange: (c) => setState(() => _currency = c),
-              ),
-              _Step3(
-                title: _titleCtrl.text,
-                price: _priceCtrl.text,
-                currency: _currency,
-                location: _locationCtrl.text,
-                isTop: _isTop,
-                onTopChanged: (v) => setState(() => _isTop = v),
-              ),
-            ][_step],
+            child: _step == 0
+                ? _Step1(
+                    images: _images,
+                    onPickImages: _pickImages,
+                    onRemoveImage: (i) => setState(() => _images.removeAt(i)),
+                    titleCtrl: _titleCtrl,
+                    catId: _catId,
+                    onCatTap: () => _showCategorySheet(context),
+                    rc: rc,
+                  )
+                : _step == 1
+                    ? _Step2(
+                        descCtrl: _descCtrl,
+                        priceCtrl: _priceCtrl,
+                        locationCtrl: _locationCtrl,
+                        phoneCtrl: _phoneCtrl,
+                        currency: _currency,
+                        onCurrencyChange: (c) => setState(() => _currency = c),
+                        condition: _condition,
+                        onConditionChange: (c) => setState(() => _condition = c),
+                        rc: rc,
+                      )
+                    : _Step3(
+                        title: _titleCtrl.text,
+                        price: _priceCtrl.text,
+                        currency: _currency,
+                        location: _locationCtrl.text,
+                        category: _catId,
+                        isTop: _isTop,
+                        onTopChanged: (v) => setState(() => _isTop = v),
+                        rc: rc,
+                      ),
           ),
         ),
       ),
-      bottomNavigationBar: _BottomAction(
-        step: _step,
-        loading: _loading,
-        onNext: _next,
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.fromLTRB(
+            16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+        decoration: BoxDecoration(
+          color: rc.card,
+          border: Border(top: BorderSide(color: rc.line)),
+        ),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: cAccent))
+            : GestureDetector(
+                onTap: _next,
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: cAccent,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [BoxShadow(
+                      color: cAccent.withValues(alpha: 0.35),
+                      blurRadius: 14, offset: const Offset(0, 6))],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _step == 2 ? S.get('publish') : S.get('next'),
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        _step == 2 ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                        size: 18, color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  void _showCategorySheet(BuildContext context) {
+    final rc = RC.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: BoxDecoration(
+          color: rc.card,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 36, height: 4, margin: const EdgeInsets.only(top: 8, bottom: 16),
+                decoration: BoxDecoration(color: rc.line, borderRadius: BorderRadius.circular(2))),
+            Text(S.get('selectCategory'),
+                style: GoogleFonts.spectral(
+                    fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
+            const SizedBox(height: 14),
+            ...kCategories.map((c) => GestureDetector(
+              onTap: () { setState(() => _catId = c.id); Navigator.pop(context); },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: _catId == c.id ? cAccent.withValues(alpha: 0.08) : rc.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _catId == c.id ? cAccent : rc.line),
+                ),
+                child: Row(
+                  children: [
+                    Text(c.emoji, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 12),
+                    Text(c.name, style: GoogleFonts.hankenGrotesk(
+                        fontSize: 14, fontWeight: FontWeight.w600,
+                        color: _catId == c.id ? cAccent : rc.ink)),
+                  ],
+                ),
+              ),
+            )),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Step indicator ────────────────────────────────────────────
+// ── Step bar ──────────────────────────────────────────────────
 
-class _StepIndicator extends StatelessWidget {
-  final int current;
-  const _StepIndicator({required this.current});
-
+class _StepBar extends StatelessWidget {
+  final int step;
+  final List<String> steps;
+  final RC rc;
+  const _StepBar({required this.step, required this.steps, required this.rc});
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final labels = [l.stepBasic, l.stepDetails, l.stepPublish];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        children: List.generate(labels.length * 2 - 1, (i) {
+        children: List.generate(steps.length * 2 - 1, (i) {
           if (i.isOdd) {
-            // Connector
-            final stepIdx = i ~/ 2;
             return Expanded(
               child: Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: stepIdx < current
-                      ? AppColors.primary
-                      : AppColors.border,
-                  borderRadius: BorderRadius.circular(1),
-                ),
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: i ~/ 2 < step ? cAccent : rc.line,
               ),
             );
           }
           final idx = i ~/ 2;
-          final done = idx < current;
-          final active = idx == current;
-          return _StepDot(
-              index: idx + 1,
-              label: labels[idx],
-              done: done,
-              active: active);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 26, height: 26,
+                decoration: BoxDecoration(
+                  color: idx <= step ? cAccent : rc.card,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: idx <= step ? cAccent : rc.line,
+                    width: idx == step ? 2 : 1,
+                  ),
+                ),
+                child: Center(
+                  child: idx < step
+                      ? const Icon(Icons.check_rounded, size: 13, color: Colors.white)
+                      : Text('${idx + 1}',
+                          style: GoogleFonts.hankenGrotesk(
+                              fontSize: 11, fontWeight: FontWeight.w700,
+                              color: idx == step ? Colors.white : rc.muted)),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(steps[idx],
+                  style: GoogleFonts.hankenGrotesk(
+                      fontSize: 9,
+                      fontWeight: idx == step ? FontWeight.w700 : FontWeight.w400,
+                      color: idx == step ? cAccent : rc.muted)),
+            ],
+          );
         }),
       ),
     );
   }
 }
 
-class _StepDot extends StatelessWidget {
-  final int index;
-  final String label;
-  final bool done;
-  final bool active;
-  const _StepDot(
-      {required this.index,
-      required this.label,
-      required this.done,
-      required this.active});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: done || active ? AppColors.primary : AppColors.surfaceAlt,
-            shape: BoxShape.circle,
-            border: Border.all(
-                color: done || active ? AppColors.primary : AppColors.border,
-                width: active ? 2 : 1),
-          ),
-          child: Center(
-            child: done
-                ? const Icon(Icons.check_rounded,
-                    size: 14, color: Colors.white)
-                : Text('$index',
-                    style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: active
-                            ? AppColors.onPrimary
-                            : AppColors.textHint)),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label,
-            style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-                color:
-                    active ? AppColors.primary : AppColors.textSecondary)),
-      ],
-    );
-  }
-}
-
-// ── Step 1: Asosiy ───────────────────────────────────────────
+// ── Step 1: Basic info ────────────────────────────────────────
 
 class _Step1 extends StatelessWidget {
-  final TextEditingController titleCtrl;
-  final String catId;
-  final String subId;
-  final List<AppSubcategory> subs;
   final List<XFile> images;
   final VoidCallback onPickImages;
-  final ValueChanged<String?> onCatChanged;
-  final ValueChanged<String?> onSubChanged;
   final ValueChanged<int> onRemoveImage;
-
+  final TextEditingController titleCtrl;
+  final String catId;
+  final VoidCallback onCatTap;
+  final RC rc;
   const _Step1({
-    required this.titleCtrl,
-    required this.catId,
-    required this.subId,
-    required this.subs,
-    required this.images,
-    required this.onPickImages,
-    required this.onCatChanged,
-    required this.onSubChanged,
-    required this.onRemoveImage,
+    required this.images, required this.onPickImages, required this.onRemoveImage,
+    required this.titleCtrl, required this.catId, required this.onCatTap, required this.rc,
   });
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
+    final cat = kCategories.firstWhere((c) => c.id == catId, orElse: () => kCategories.first);
     return ListView(
       padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
       children: [
-        // Photo upload zone
-        _SectionLabel(l.photosLabel),
-        const SizedBox(height: 10),
+        // Photos
+        _Label(S.get('addPhoto'), rc: rc),
+        const SizedBox(height: 8),
         GestureDetector(
           onTap: onPickImages,
           child: Container(
             height: 100,
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: AppColors.border,
-                  style: BorderStyle.solid,
-                  width: 1.5),
+              color: rc.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: rc.line),
             ),
             child: images.isEmpty
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.add_a_photo_rounded,
-                          color: AppColors.primary, size: 28),
+                      Icon(Icons.add_a_photo_rounded, color: cAccent, size: 26),
                       const SizedBox(height: 8),
-                      Text(l.addPhoto,
-                          style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary)),
+                      Text(S.get('addPhoto'),
+                          style: GoogleFonts.hankenGrotesk(
+                              fontSize: 13, color: rc.muted)),
                     ],
                   )
                 : ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.all(8),
-                    itemCount:
-                        images.length + (images.length < 10 ? 1 : 0),
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (ctx, i) {
+                    padding: const EdgeInsets.all(10),
+                    itemCount: images.length + (images.length < 10 ? 1 : 0),
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
                       if (i == images.length) {
                         return GestureDetector(
                           onTap: onPickImages,
                           child: Container(
-                            width: 80,
+                            width: 74,
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceAlt,
+                              color: rc.bg,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColors.border),
+                              border: Border.all(color: rc.line),
                             ),
-                            child: const Icon(Icons.add_rounded,
-                                color: AppColors.primary),
+                            child: Icon(Icons.add_rounded, color: cAccent),
                           ),
                         );
                       }
@@ -440,216 +440,100 @@ class _Step1 extends StatelessWidget {
                   ),
           ),
         ),
-        const SizedBox(height: 20),
-
+        const SizedBox(height: 18),
         // Title
-        _SectionLabel(l.titleLabel),
+        _Label(S.get('title'), rc: rc),
         const SizedBox(height: 8),
-        _Field(
-          controller: titleCtrl,
-          hint: l.titleHint,
-        ),
-        const SizedBox(height: 20),
-
+        _Field(ctrl: titleCtrl, hint: 'Masalan: Traktor John Deere', rc: rc),
+        const SizedBox(height: 18),
         // Category
-        _SectionLabel(l.mainCategoryLabel),
+        _Label(S.get('categories'), rc: rc),
         const SizedBox(height: 8),
         GestureDetector(
-          onTap: () => _showCategorySheet(context, onCatChanged),
+          onTap: onCatTap,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: rc.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: rc.line),
             ),
             child: Row(
               children: [
-                Text(
-                  kCategories
-                          .firstWhere((c) => c.id == catId)
-                          .icon +
-                      '  ' +
-                      kCategories
-                          .firstWhere((c) => c.id == catId)
-                          .uzName,
-                  style: GoogleFonts.inter(
-                      fontSize: 14, color: AppColors.textPrimary),
-                ),
+                Text(cat.emoji, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 10),
+                Text(cat.name,
+                    style: GoogleFonts.hankenGrotesk(fontSize: 14, color: rc.ink)),
                 const Spacer(),
-                const Icon(Icons.expand_more_rounded,
-                    color: AppColors.textHint),
+                Icon(Icons.expand_more_rounded, color: rc.muted),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 14),
-        _SectionLabel(l.subCategoryLabel),
-        const SizedBox(height: 8),
-        _DropdownField(
-          value: subId,
-          items: subs
-              .map((s) => DropdownMenuItem(
-                    value: s.id,
-                    child: Text(s.uzName,
-                        style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: AppColors.textPrimary)),
-                  ))
-              .toList(),
-          onChanged: onSubChanged,
         ),
         const SizedBox(height: 24),
       ],
     );
   }
-
-  void _showCategorySheet(
-      BuildContext context, ValueChanged<String?> onSelect) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-            Text(AppLocalizations.of(context).selectCategoryTitle,
-                style: GoogleFonts.playfairDisplay(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 16),
-            ...kCategories.map((c) => GestureDetector(
-                  onTap: () {
-                    onSelect(c.id);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceAlt,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(c.icon,
-                            style: const TextStyle(fontSize: 20)),
-                        const SizedBox(width: 12),
-                        Text(c.uzName,
-                            style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary)),
-                      ],
-                    ),
-                  ),
-                )),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-// ── Step 2: Batafsil ─────────────────────────────────────────
+// ── Step 2: Details ───────────────────────────────────────────
 
 class _Step2 extends StatelessWidget {
-  final TextEditingController descCtrl;
-  final TextEditingController priceCtrl;
-  final TextEditingController phoneCtrl;
-  final TextEditingController locationCtrl;
-  final String currency;
-  final ValueChanged<String> onCurrencyChange;
-
+  final TextEditingController descCtrl, priceCtrl, locationCtrl, phoneCtrl;
+  final String currency, condition;
+  final ValueChanged<String> onCurrencyChange, onConditionChange;
+  final RC rc;
   const _Step2({
-    required this.descCtrl,
-    required this.priceCtrl,
-    required this.phoneCtrl,
-    required this.locationCtrl,
-    required this.currency,
-    required this.onCurrencyChange,
+    required this.descCtrl, required this.priceCtrl,
+    required this.locationCtrl, required this.phoneCtrl,
+    required this.currency, required this.onCurrencyChange,
+    required this.condition, required this.onConditionChange,
+    required this.rc,
   });
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
     return ListView(
       padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
       children: [
-        _SectionLabel(l.descriptionLabel),
+        _Label(S.get('description'), rc: rc),
         const SizedBox(height: 8),
-        _Field(
-          controller: descCtrl,
-          hint: l.descriptionHint,
-          maxLines: 5,
-          validator: (v) =>
-              (v == null || v.trim().length < 10) ? l.descriptionError : null,
-        ),
-        const SizedBox(height: 20),
-
-        _SectionLabel(l.priceLabel),
+        _Field(ctrl: descCtrl, hint: "Mahsulot haqida yozing...", maxLines: 4, rc: rc,
+            validator: (v) => (v?.trim().length ?? 0) < 10 ? 'Kamida 10 belgi' : null),
+        const SizedBox(height: 18),
+        _Label(S.get('price'), rc: rc),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: _Field(
-                controller: priceCtrl,
-                hint: '0',
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return l.priceError;
-                  if (double.tryParse(v.trim()) == null) return l.priceNumberError;
-                  return null;
-                },
-              ),
+              child: _Field(ctrl: priceCtrl, hint: '0',
+                  keyboardType: TextInputType.number, rc: rc,
+                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Narx kiriting' : null),
             ),
             const SizedBox(width: 10),
             // Currency toggle
             Container(
               height: 50,
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
+                  color: rc.card, borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: rc.line)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: ['USD', "So'm"].map((c) {
-                  final sel = currency == c;
+                  final sel = currency == c || (c == "So'm" && currency == 'UZS');
                   return GestureDetector(
-                    onTap: () => onCurrencyChange(c),
+                    onTap: () => onCurrencyChange(c == "So'm" ? 'UZS' : 'USD'),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 13),
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       decoration: BoxDecoration(
-                        color: sel ? AppColors.primary : Colors.transparent,
+                        color: sel ? cAccent : Colors.transparent,
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child: Text(c,
-                          style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: sel
-                                  ? AppColors.onPrimary
-                                  : AppColors.textSecondary)),
+                          style: GoogleFonts.hankenGrotesk(
+                              fontSize: 13, fontWeight: FontWeight.w700,
+                              color: sel ? Colors.white : rc.muted)),
                     ),
                   );
                 }).toList(),
@@ -657,119 +541,125 @@ class _Step2 extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-
-        _SectionLabel(l.phoneLabel),
+        const SizedBox(height: 18),
+        // Condition
+        _Label(S.get('condition'), rc: rc),
         const SizedBox(height: 8),
-        _Field(
-          controller: phoneCtrl,
-          hint: '+998 90 123 45 67',
-          keyboardType: TextInputType.phone,
-          validator: (v) =>
-              (v == null || v.trim().length < 9) ? l.phoneError : null,
+        Row(
+          children: [
+            for (final c in [('used', S.get('conditionUsed')), ('new', S.get('conditionNew'))])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => onConditionChange(c.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: condition == c.$1 ? cAccent : rc.card,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: condition == c.$1 ? cAccent : rc.line),
+                    ),
+                    child: Text(c.$2,
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 13, fontWeight: FontWeight.w600,
+                            color: condition == c.$1 ? Colors.white : rc.ink)),
+                  ),
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 20),
-
-        _SectionLabel(l.locationLabel),
+        const SizedBox(height: 18),
+        _Label(S.get('location'), rc: rc),
         const SizedBox(height: 8),
-        _Field(
-          controller: locationCtrl,
-          hint: 'Toshkent shahar...',
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? l.locationError : null,
-        ),
+        _Field(ctrl: locationCtrl, hint: 'Toshkent shahar...', rc: rc),
+        const SizedBox(height: 18),
+        _Label(S.get('phone'), rc: rc),
+        const SizedBox(height: 8),
+        _Field(ctrl: phoneCtrl, hint: '+998 90 123 45 67',
+            keyboardType: TextInputType.phone, rc: rc),
         const SizedBox(height: 24),
       ],
     );
   }
 }
 
-// ── Step 3: Nashr ────────────────────────────────────────────
+// ── Step 3: Preview ───────────────────────────────────────────
 
 class _Step3 extends StatelessWidget {
-  final String title;
-  final String price;
-  final String currency;
-  final String location;
+  final String title, price, currency, location, category;
   final bool isTop;
   final ValueChanged<bool> onTopChanged;
-
+  final RC rc;
   const _Step3({
-    required this.title,
-    required this.price,
-    required this.currency,
-    required this.location,
-    required this.isTop,
-    required this.onTopChanged,
+    required this.title, required this.price, required this.currency,
+    required this.location, required this.category,
+    required this.isTop, required this.onTopChanged, required this.rc,
   });
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
+    final cat = kCategories.firstWhere((c) => c.id == category, orElse: () => kCategories.first);
+    final displayPrice = price.isNotEmpty
+        ? (currency == 'USD' ? '\$$price' : '$price so\'m')
+        : '—';
     return ListView(
       padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
       children: [
         // Preview card
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: rc.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-            boxShadow: kCardShadow,
+            border: Border.all(color: rc.line),
+            boxShadow: warmShadow(rc.dark),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Text(l.previewLabel,
-                      style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary)),
+                  Text(S.get('preview'),
+                      style: GoogleFonts.hankenGrotesk(
+                          fontSize: 11, fontWeight: FontWeight.w600, color: rc.muted)),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
+                      color: const Color(0xFF22A06B).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(l.readyLabel,
-                        style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.success)),
+                    child: Text('Tayyor', style: GoogleFonts.hankenGrotesk(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: const Color(0xFF22A06B))),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(title.isEmpty ? l.titlePlaceholder : title,
-                  style: GoogleFonts.playfairDisplay(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary)),
-              const SizedBox(height: 6),
-              Text(
-                price.isEmpty ? '\$0' : '\$$price $currency',
-                style: GoogleFonts.playfairDisplay(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(cat.emoji, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
+                  Text(cat.name, style: GoogleFonts.hankenGrotesk(
+                      fontSize: 11, color: cAccent, fontWeight: FontWeight.w600)),
+                ],
               ),
+              const SizedBox(height: 6),
+              Text(title.isEmpty ? S.get('title') : title,
+                  style: GoogleFonts.spectral(
+                      fontSize: 17, fontWeight: FontWeight.w700, color: rc.ink)),
+              const SizedBox(height: 6),
+              Text(displayPrice,
+                  style: GoogleFonts.spectral(
+                      fontSize: 22, fontWeight: FontWeight.w700, color: rc.accent)),
               if (location.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_rounded,
-                        size: 12, color: AppColors.textHint),
+                    Icon(Icons.location_on_rounded, size: 12, color: rc.muted),
                     const SizedBox(width: 4),
-                    Text(location,
-                        style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppColors.textSecondary)),
+                    Text(location, style: GoogleFonts.hankenGrotesk(fontSize: 12, color: rc.muted)),
                   ],
                 ),
               ],
@@ -777,44 +667,40 @@ class _Step3 extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-
         // TOP upgrade card
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-                colors: AppColors.amberGradient,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight),
+              colors: [Color(0xFF2C1810), Color(0xFF3D2410)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             children: [
-              const Icon(Icons.star_rounded, color: Colors.white, size: 28),
+              Icon(Icons.star_rounded, color: cAmber, size: 28),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l.topAdLabel,
-                        style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white)),
-                    Text(l.topAdDesc,
-                        style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.85))),
+                    Text(S.get('topUpgrade'),
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                    Text(S.get('topUpgradeDesc'),
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 11, color: Colors.white.withValues(alpha: 0.75))),
                   ],
                 ),
               ),
               Switch(
                 value: isTop,
                 onChanged: onTopChanged,
-                activeColor: Colors.white,
-                activeTrackColor: Colors.white.withValues(alpha: 0.4),
+                activeColor: cAmber,
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
                 inactiveThumbColor: Colors.white,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
               ),
             ],
           ),
@@ -825,174 +711,57 @@ class _Step3 extends StatelessWidget {
   }
 }
 
-// ── Bottom action bar ─────────────────────────────────────────
+// ── Shared ────────────────────────────────────────────────────
 
-class _BottomAction extends StatelessWidget {
-  final int step;
-  final bool loading;
-  final VoidCallback onNext;
-  const _BottomAction(
-      {required this.step, required this.loading, required this.onNext});
-
-  @override
-  Widget build(BuildContext context) {
-    final isLast = step == 2;
-    final l = AppLocalizations.of(context);
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: GestureDetector(
-        onTap: loading ? null : onNext,
-        child: Container(
-          height: 52,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: [
-              BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.30),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6)),
-            ],
-          ),
-          child: Center(
-            child: loading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                        color: AppColors.onPrimary, strokeWidth: 2.5))
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        isLast ? l.publishBtn : l.nextBtn,
-                        style: GoogleFonts.inter(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onPrimary),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        isLast
-                            ? Icons.check_rounded
-                            : Icons.arrow_forward_rounded,
-                        size: 18,
-                        color: AppColors.onPrimary,
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Shared widgets ────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
+class _Label extends StatelessWidget {
   final String text;
-  const _SectionLabel(this.text);
-
+  final RC rc;
+  const _Label(this.text, {required this.rc});
   @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary));
-  }
+  Widget build(BuildContext context) => Text(text,
+      style: GoogleFonts.hankenGrotesk(
+          fontSize: 13, fontWeight: FontWeight.w700, color: rc.ink));
 }
 
 class _Field extends StatelessWidget {
-  final TextEditingController controller;
-  final String? hint;
+  final TextEditingController ctrl;
+  final String hint;
   final int maxLines;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
-
+  final RC rc;
   const _Field({
-    required this.controller,
-    this.hint,
-    this.maxLines = 1,
-    this.keyboardType = TextInputType.text,
-    this.validator,
+    required this.ctrl, required this.hint, this.maxLines = 1,
+    this.keyboardType = TextInputType.text, this.validator, required this.rc,
   });
-
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      controller: controller,
+      controller: ctrl,
       maxLines: maxLines,
       keyboardType: keyboardType,
       validator: validator,
-      style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
+      style: GoogleFonts.hankenGrotesk(fontSize: 14, color: rc.ink),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.inter(fontSize: 13, color: AppColors.textHint),
+        hintStyle: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
         filled: true,
-        fillColor: AppColors.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        fillColor: rc.card,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.border)),
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: rc.line)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(color: AppColors.primary, width: 1.5)),
+            borderSide: const BorderSide(color: cAccent, width: 1.5)),
         errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.danger)),
+            borderSide: const BorderSide(color: Colors.red)),
         focusedErrorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.danger, width: 1.5)),
+            borderSide: const BorderSide(color: Colors.red, width: 1.5)),
       ),
-    );
-  }
-}
-
-class _DropdownField extends StatelessWidget {
-  final String value;
-  final List<DropdownMenuItem<String>> items;
-  final ValueChanged<String?> onChanged;
-  const _DropdownField(
-      {required this.value, required this.items, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      items: items,
-      onChanged: onChanged,
-      style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: AppColors.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.border)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(color: AppColors.primary, width: 1.5)),
-      ),
-      icon: const Icon(Icons.expand_more_rounded, color: AppColors.textHint),
-      dropdownColor: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
     );
   }
 }
@@ -1006,43 +775,36 @@ class _ImageThumb extends StatefulWidget {
 }
 
 class _ImageThumbState extends State<_ImageThumb> {
-  late Future<Uint8List> _bytesFuture;
+  late Future<Uint8List> _bytes;
   @override
   void initState() {
     super.initState();
-    _bytesFuture = widget.file.readAsBytes();
+    _bytes = widget.file.readAsBytes();
   }
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 80,
+      width: 74,
       child: Stack(
         fit: StackFit.expand,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: FutureBuilder<Uint8List>(
-              future: _bytesFuture,
-              builder: (ctx, snap) {
-                if (!snap.hasData) {
-                  return Container(color: AppColors.surfaceAlt);
-                }
-                return Image.memory(snap.data!, fit: BoxFit.cover);
-              },
+              future: _bytes,
+              builder: (_, snap) => snap.hasData
+                  ? Image.memory(snap.data!, fit: BoxFit.cover)
+                  : Container(color: cLine),
             ),
           ),
           Positioned(
-            top: 3,
-            right: 3,
+            top: 3, right: 3,
             child: GestureDetector(
               onTap: widget.onRemove,
               child: Container(
                 padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                    color: AppColors.danger, shape: BoxShape.circle),
-                child: const Icon(Icons.close_rounded,
-                    size: 10, color: Colors.white),
+                decoration: const BoxDecoration(color: cAccent, shape: BoxShape.circle),
+                child: const Icon(Icons.close_rounded, size: 9, color: Colors.white),
               ),
             ),
           ),

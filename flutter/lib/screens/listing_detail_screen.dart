@@ -1,253 +1,210 @@
-// ============================================================
-// screens/listing_detail_screen.dart  –  Premium detail view
-// ============================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../app_theme.dart';
 import '../app_state.dart';
-import '../l10n/app_localizations.dart';
-import '../mock_data.dart';
+import '../l10n/strings.dart';
 import '../models.dart';
+import '../theme.dart';
 
 class ListingDetailScreen extends StatefulWidget {
-  final String listingId;
-  const ListingDetailScreen({super.key, required this.listingId});
+  final Listing listing;
+  const ListingDetailScreen({super.key, required this.listing});
   @override
   State<ListingDetailScreen> createState() => _ListingDetailScreenState();
 }
 
 class _ListingDetailScreenState extends State<ListingDetailScreen> {
-  int _imgIndex = 0;
+  int _imgIdx = 0;
+  // Simulate 3 images
+  late final List<String> _images;
+
+  @override
+  void initState() {
+    super.initState();
+    final url = widget.listing.imageUrl;
+    _images = url.isNotEmpty ? [url, url, url] : [];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateProvider.of(context);
-    final loc = AppLocalizations.of(context);
-    final listing = state.listings.firstWhere(
-      (l) => l.id == widget.listingId,
-      orElse: () => state.listings.first,
-    );
-    final catColor = AppTheme.categoryColor(listing.categoryId);
-    final catName = kCategories
-        .firstWhere((c) => c.id == listing.categoryId,
-            orElse: () => kCategories.first)
-        .uzName;
-
-    // Simulate multiple images for demo: repeat the single url 3x
-    final images = listing.imageUrl.isNotEmpty
-        ? List.generate(3, (_) => listing.imageUrl)
-        : <String>[];
+    final rc = RC.of(context);
+    final l = widget.listing;
+    final state = AppStateScope.of(context);
+    final isFav = state.isFavorite(l.id);
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: rc.bg,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── Image carousel ────────────────────────────────────────
+          // ── Image carousel ────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 300,
+            expandedHeight: 280,
             pinned: true,
-            backgroundColor: AppColors.surface,
+            backgroundColor: rc.card,
             surfaceTintColor: Colors.transparent,
-            elevation: 0,
             automaticallyImplyLeading: false,
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Carousel
-                  images.isNotEmpty
+                  _images.isNotEmpty
                       ? PageView.builder(
-                          itemCount: images.length,
-                          onPageChanged: (i) =>
-                              setState(() => _imgIndex = i),
+                          itemCount: _images.length,
+                          onPageChanged: (i) => setState(() => _imgIdx = i),
                           itemBuilder: (_, i) => Image.network(
-                            images[i],
+                            _images[i],
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                _NoPhoto(catColor: catColor, listing: listing),
+                            errorBuilder: (_, __, ___) => Container(color: rc.line),
                           ),
                         )
-                      : _NoPhoto(catColor: catColor, listing: listing),
-                  // Gradient overlay
+                      : Container(color: rc.line,
+                          child: Icon(Icons.image_outlined, size: 60, color: rc.muted)),
+                  // Gradient
                   Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
+                    bottom: 0, left: 0, right: 0,
                     child: Container(
                       height: 80,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.45),
-                            Colors.transparent
-                          ],
+                          colors: [Colors.black.withValues(alpha: 0.4), Colors.transparent],
                         ),
                       ),
                     ),
                   ),
-                  // Page indicator
-                  if (images.length > 1)
+                  // Dot indicator
+                  if (_images.length > 1)
                     Positioned(
-                      bottom: 12,
-                      right: 14,
+                      bottom: 12, right: 14,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
+                          color: Colors.black.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          '${_imgIndex + 1}/${images.length}',
-                          style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600),
-                        ),
+                        child: Text('${_imgIdx + 1}/${_images.length}',
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
                     ),
                 ],
               ),
             ),
-            leading: _RoundBtn(
-              icon: Icons.arrow_back_rounded,
+            leading: _OvBtn(
+              icon: Icons.arrow_back_ios_rounded,
               onTap: () => Navigator.of(context).pop(),
             ),
             actions: [
-              _RoundBtn(
-                icon: listing.isFavorite
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                iconColor:
-                    listing.isFavorite ? AppColors.danger : AppColors.textPrimary,
-                onTap: () => state.toggleFavorite(listing.id),
+              _OvBtn(
+                icon: isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                iconColor: isFav ? Colors.red : null,
+                onTap: () {
+                  state.toggleFavorite(l);
+                  HapticFeedback.lightImpact();
+                },
               ),
-              _RoundBtn(
+              _OvBtn(
                 icon: Icons.share_rounded,
                 onTap: () => HapticFeedback.lightImpact(),
               ),
             ],
           ),
 
-          // ── Body ──────────────────────────────────────────────────
+          // ── Body ──────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 120),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Category + views row
+                  // Category + date
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                         decoration: BoxDecoration(
-                          color: catColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
+                          color: cAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(catName,
-                            style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: catColor)),
+                        child: Text(l.category,
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 11, fontWeight: FontWeight.w600, color: cAccent)),
                       ),
                       const Spacer(),
-                      Icon(Icons.remove_red_eye_rounded,
-                          size: 14, color: AppColors.textHint),
+                      Icon(Icons.remove_red_eye_outlined, size: 12, color: rc.muted),
                       const SizedBox(width: 4),
-                      Text(loc.viewCount(listing.views),
-                          style: GoogleFonts.inter(
-                              fontSize: 11, color: AppColors.textSecondary)),
-                      const SizedBox(width: 12),
-                      Icon(Icons.access_time_rounded,
-                          size: 14, color: AppColors.textHint),
+                      Text('${l.views} ${S.get('views')}',
+                          style: GoogleFonts.hankenGrotesk(fontSize: 11, color: rc.muted)),
+                      const SizedBox(width: 10),
+                      Icon(Icons.access_time_rounded, size: 12, color: rc.muted),
                       const SizedBox(width: 4),
-                      Text(listing.date,
-                          style: GoogleFonts.inter(
-                              fontSize: 11, color: AppColors.textSecondary)),
+                      Text(l.date,
+                          style: GoogleFonts.hankenGrotesk(fontSize: 11, color: rc.muted)),
                     ],
                   ),
-                  const SizedBox(height: 14),
-
+                  const SizedBox(height: 12),
                   // Price
                   Text(
-                    Listing.formatPrice(listing.price, listing.currency),
-                    style: GoogleFonts.playfairDisplay(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary),
+                    l.formattedPrice,
+                    style: GoogleFonts.spectral(
+                        fontSize: 30, fontWeight: FontWeight.w700, color: rc.accent),
                   ),
                   const SizedBox(height: 8),
-
                   // Title
                   Text(
-                    listing.title,
-                    style: GoogleFonts.playfairDisplay(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                        height: 1.3),
+                    l.title,
+                    style: GoogleFonts.spectral(
+                        fontSize: 20, fontWeight: FontWeight.w600, color: rc.ink, height: 1.3),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Property chips
+                  const SizedBox(height: 14),
+                  // Props
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
                         _PropChip(
                             icon: Icons.location_on_rounded,
-                            text: listing.location),
+                            text: l.location, rc: rc),
                         const SizedBox(width: 8),
                         _PropChip(
-                            icon: Icons.category_rounded, text: catName),
-                        if (listing.isCompany) ...[
+                            icon: Icons.inventory_2_outlined,
+                            text: l.condition == 'new' ? S.get('conditionNew') : S.get('conditionUsed'),
+                            rc: rc),
+                        if (l.isCompany) ...[
                           const SizedBox(width: 8),
                           _PropChip(
                               icon: Icons.business_rounded,
-                              text: loc.companyLabel),
+                              text: S.get('company'), rc: rc),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // Seller card
+                  // ── Seller card ───────────────────────────────
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
+                      color: rc.card,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border),
-                      boxShadow: kCardShadow,
+                      border: Border.all(color: rc.line),
+                      boxShadow: warmShadow(rc.dark),
                     ),
                     child: Row(
                       children: [
                         Container(
-                          width: 50,
-                          height: 50,
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                                colors: AppColors.primaryGradient),
-                            shape: BoxShape.circle,
-                          ),
+                          width: 48, height: 48,
+                          decoration: BoxDecoration(color: cAccent, shape: BoxShape.circle),
                           child: Center(
                             child: Text(
-                              listing.sellerName.isNotEmpty
-                                  ? listing.sellerName
-                                      .substring(0, 1)
-                                      .toUpperCase()
+                              l.sellerName.isNotEmpty
+                                  ? l.sellerName.substring(0, 1).toUpperCase()
                                   : '?',
-                              style: GoogleFonts.playfairDisplay(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.onPrimary),
+                              style: GoogleFonts.spectral(
+                                  fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
                             ),
                           ),
                         ),
@@ -256,134 +213,114 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(listing.sellerName,
-                                  style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary)),
+                              Text(l.sellerName,
+                                  style: GoogleFonts.hankenGrotesk(
+                                      fontSize: 14, fontWeight: FontWeight.w700, color: rc.ink)),
                               const SizedBox(height: 3),
                               Row(
                                 children: [
                                   const Icon(Icons.verified_rounded,
-                                      size: 12, color: AppColors.success),
+                                      size: 12, color: Color(0xFF22A06B)),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    listing.isCompany
-                                        ? loc.companyVerified
-                                        : loc.individualVerified,
-                                    style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        color: AppColors.textSecondary),
-                                  ),
+                                  Text(S.get('verified'),
+                                      style: GoogleFonts.hankenGrotesk(
+                                          fontSize: 11, color: rc.muted)),
+                                  const SizedBox(width: 8),
+                                  Icon(Icons.star_rounded, size: 12, color: cAmber),
+                                  const SizedBox(width: 2),
+                                  Text('${l.sellerRating}',
+                                      style: GoogleFonts.hankenGrotesk(
+                                          fontSize: 11, fontWeight: FontWeight.w600, color: rc.ink)),
                                 ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: List.generate(
-                                  5,
-                                  (i) => Icon(Icons.star_rounded,
-                                      size: 12,
-                                      color: i < 4
-                                          ? AppColors.amber
-                                          : AppColors.border),
-                                ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.arrow_forward_ios_rounded,
-                            size: 14, color: AppColors.textHint),
+                        Icon(Icons.chevron_right_rounded, color: rc.muted),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
 
-                  // Description
-                  Text(loc.descriptionTitle,
-                      style: GoogleFonts.playfairDisplay(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary)),
+                  // ── Description ───────────────────────────────
+                  Text(S.get('description'),
+                      style: GoogleFonts.spectral(
+                          fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
                   const SizedBox(height: 10),
-                  Text(listing.description,
-                      style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                          height: 1.65)),
-                  const SizedBox(height: 100),
+                  Text(l.description,
+                      style: GoogleFonts.hankenGrotesk(
+                          fontSize: 14, color: rc.muted, height: 1.65)),
                 ],
               ),
             ),
           ),
         ],
       ),
-
-      // ── Sticky bottom bar ──────────────────────────────────────
+      // ── Sticky bottom ─────────────────────────────────────────
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
+        decoration: BoxDecoration(
+          color: rc.card,
+          border: Border(top: BorderSide(color: rc.line)),
         ),
         child: SafeArea(
           top: false,
           child: Row(
             children: [
+              // Message
               Expanded(
                 child: GestureDetector(
-                  onTap: () => showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => _ContactSheet(
-                        name: listing.sellerName,
-                        phone: listing.phone),
-                  ),
+                  onTap: () {},
                   child: Container(
                     height: 50,
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 5)),
-                      ],
+                      color: rc.card,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: rc.line),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.phone_rounded,
-                            color: AppColors.onPrimary, size: 18),
-                        const SizedBox(width: 8),
-                        Text(loc.callBtn,
-                            style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.onPrimary)),
+                        Icon(Icons.chat_bubble_outline_rounded, size: 16, color: rc.ink),
+                        const SizedBox(width: 7),
+                        Text(S.get('message'),
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 14, fontWeight: FontWeight.w600, color: rc.ink)),
                       ],
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              GestureDetector(
-                onTap: () => showModalBottomSheet(
-                  context: context,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _ContactSheet(
-                      name: listing.sellerName, phone: listing.phone),
-                ),
-                child: Container(
-                  height: 50,
-                  width: 50,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.border),
+              // Call
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  onTap: () async {
+                    final uri = Uri.parse('tel:${l.phone}');
+                    if (await canLaunchUrl(uri)) launchUrl(uri);
+                  },
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: cAccent,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [BoxShadow(
+                        color: cAccent.withValues(alpha: 0.35),
+                        blurRadius: 12, offset: const Offset(0, 5),
+                      )],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.phone_rounded, size: 16, color: Colors.white),
+                        const SizedBox(width: 7),
+                        Text(S.get('call'),
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ],
+                    ),
                   ),
-                  child: const Icon(Icons.chat_bubble_outline_rounded,
-                      color: AppColors.textPrimary, size: 20),
                 ),
               ),
             ],
@@ -394,15 +331,11 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 }
 
-// ── Helper widgets ────────────────────────────────────────────
-
-class _RoundBtn extends StatelessWidget {
+class _OvBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final Color? iconColor;
-  const _RoundBtn(
-      {required this.icon, required this.onTap, this.iconColor});
-
+  const _OvBtn({required this.icon, required this.onTap, this.iconColor});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -411,12 +344,11 @@ class _RoundBtn extends StatelessWidget {
         margin: const EdgeInsets.all(8),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.92),
+          color: Colors.white.withValues(alpha: 0.9),
           shape: BoxShape.circle,
-          boxShadow: kCardShadow,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8)],
         ),
-        child: Icon(icon,
-            color: iconColor ?? AppColors.textPrimary, size: 20),
+        child: Icon(icon, color: iconColor ?? cInk, size: 18),
       ),
     );
   }
@@ -425,173 +357,26 @@ class _RoundBtn extends StatelessWidget {
 class _PropChip extends StatelessWidget {
   final IconData icon;
   final String text;
-  const _PropChip({required this.icon, required this.text});
-
+  final RC rc;
+  const _PropChip({required this.icon, required this.text, required this.rc});
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.surfaceAlt,
+        color: rc.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: rc.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: AppColors.primary),
-          const SizedBox(width: 6),
+          Icon(icon, size: 12, color: cAccent),
+          const SizedBox(width: 5),
           Text(text,
-              style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary)),
+              style: GoogleFonts.hankenGrotesk(
+                  fontSize: 12, fontWeight: FontWeight.w500, color: rc.ink)),
         ],
-      ),
-    );
-  }
-}
-
-class _NoPhoto extends StatelessWidget {
-  final Color catColor;
-  final Listing listing;
-  const _NoPhoto({required this.catColor, required this.listing});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: catColor.withValues(alpha: 0.08),
-      child: Center(
-        child: Icon(AppTheme.categoryIcon(listing.categoryId),
-            size: 72, color: catColor.withValues(alpha: 0.4)),
-      ),
-    );
-  }
-}
-
-class _ContactSheet extends StatelessWidget {
-  final String name;
-  final String phone;
-  const _ContactSheet({required this.name, required this.phone});
-
-  @override
-  Widget build(BuildContext context) {
-    final loc = AppLocalizations.of(context);
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: kCardShadow,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-            ),
-            child:
-                const Icon(Icons.person_rounded, color: AppColors.primary, size: 30),
-          ),
-          const SizedBox(height: 14),
-          Text(name,
-              style: GoogleFonts.playfairDisplay(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary)),
-          const SizedBox(height: 4),
-          Text(phone,
-              style: GoogleFonts.inter(
-                  fontSize: 14, color: AppColors.textSecondary)),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: _SheetBtn(
-                  label: loc.callBtn,
-                  icon: Icons.call_rounded,
-                  color: AppColors.success,
-                  onTap: () async {
-                    final uri = Uri.parse('tel:$phone');
-                    if (await canLaunchUrl(uri)) launchUrl(uri);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _SheetBtn(
-                  label: loc.messageBtn,
-                  icon: Icons.sms_rounded,
-                  color: AppColors.primary,
-                  onTap: () async {
-                    final uri = Uri.parse('sms:$phone');
-                    if (await canLaunchUrl(uri)) launchUrl(uri);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(loc.closeBtn,
-                style: GoogleFonts.inter(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SheetBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  const _SheetBtn(
-      {required this.label,
-      required this.icon,
-      required this.color,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(label,
-                style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white)),
-          ],
-        ),
       ),
     );
   }

@@ -1,24 +1,17 @@
-// ============================================================
-// screens/search_screen.dart  –  Search with filters
-// ============================================================
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../app_theme.dart';
+import '../api.dart' as api;
 import '../app_state.dart';
-import '../l10n/app_localizations.dart';
+import '../l10n/strings.dart';
 import '../models.dart';
+import '../theme.dart';
 import '../widgets/listing_card.dart';
 import 'listing_detail_screen.dart';
 
-const _kRecentKey = 'recent_searches';
-
-const _kPopular = [
-  'Traktor', 'iPhone', 'Nexia', 'Kvartira', 'MacBook',
-];
-
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  final String? initialCategory;
+  const SearchScreen({super.key, this.initialCategory});
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
@@ -26,183 +19,229 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
+  Timer? _debounce;
 
   String _query = '';
-  List<String> _recent = [];
-
-  // Filter state (language-neutral keys)
+  String _sort = 'newest';
+  String _condition = 'all';
+  String _sellerType = 'all';
   double _minPrice = 0;
   double _maxPrice = 200000;
-  String _condition = 'all';    // 'all' | 'new' | 'used'
-  String _sortBy = 'newest';    // 'newest' | 'cheapest' | 'expensive'
+  late String _category;
+
+  List<Listing> _results = [];
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadRecent();
+    _category = widget.initialCategory ?? 'all';
+    _search();
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  void _onChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      setState(() => _query = v.trim());
+      _search();
+    });
+  }
+
+  Future<void> _search() async {
+    setState(() => _loading = true);
+    try {
+      final list = await api.getListings(
+        q: _query.isEmpty ? null : _query,
+        category: _category == 'all' ? null : _category,
+      );
+      // Client-side filter + sort
+      var filtered = list.where((l) {
+        if (_condition != 'all' && l.condition != _condition) return false;
+        if (_sellerType == 'company' && !l.isCompany) return false;
+        if (_sellerType == 'individual' && l.isCompany) return false;
+        if (l.price > _maxPrice) return false;
+        if (l.price < _minPrice) return false;
+        return true;
+      }).toList();
+
+      switch (_sort) {
+        case 'cheapest':
+          filtered.sort((a, b) => a.price.compareTo(b.price));
+          break;
+        case 'expensive':
+          filtered.sort((a, b) => b.price.compareTo(a.price));
+          break;
+        default:
+          break;
+      }
+
+      if (mounted) setState(() { _results = filtered; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; });
+    }
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
     _focus.dispose();
+    _debounce?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadRecent() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _recent = prefs.getStringList(_kRecentKey) ?? [];
-    });
-  }
-
-  Future<void> _saveRecent(String query) async {
-    final list = [query, ..._recent.where((q) => q != query)].take(8).toList();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_kRecentKey, list);
-    setState(() => _recent = list);
-  }
-
-  Future<void> _clearRecent() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kRecentKey);
-    setState(() => _recent = []);
-  }
-
-  void _search(String q) {
-    final trimmed = q.trim();
-    if (trimmed.isEmpty) return;
-    _saveRecent(trimmed);
-    setState(() => _query = trimmed);
-    _ctrl.text = trimmed;
-    _focus.unfocus();
-  }
-
-  List<Listing> _results(List<Listing> all) {
-    var list = all.where((l) {
-      final q = _query.toLowerCase();
-      final matchQ = l.title.toLowerCase().contains(q) ||
-          l.description.toLowerCase().contains(q) ||
-          l.location.toLowerCase().contains(q);
-      final matchPrice = l.price >= _minPrice && l.price <= _maxPrice;
-      return matchQ && matchPrice;
-    }).toList();
-
-    switch (_sortBy) {
-      case 'cheapest':
-        list.sort((a, b) => a.price.compareTo(b.price));
-        break;
-      case 'expensive':
-        list.sort((a, b) => b.price.compareTo(a.price));
-        break;
-      default: // newest — keep original order
-    }
-    return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateProvider.of(context);
-    final l = AppLocalizations.of(context);
-    final results = _query.isEmpty ? <Listing>[] : _results(state.listings);
-    final showResults = _query.isNotEmpty;
-
+    final rc = RC.of(context);
+    final state = AppStateScope.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: rc.bg,
       body: SafeArea(
         child: Column(
           children: [
-            // ── Search bar ─────────────────────────────────────────
+            // ── Search header ─────────────────────────────────────
             Container(
-              color: AppColors.surface,
+              color: rc.card,
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
-                    child: const Padding(
-                      padding: EdgeInsets.all(6),
-                      child: Icon(Icons.arrow_back_rounded,
-                          color: AppColors.textPrimary, size: 22),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(Icons.arrow_back_ios_rounded, color: rc.ink, size: 18),
                     ),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Container(
-                      height: 46,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.border),
+                        color: rc.bg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: rc.line),
                       ),
                       child: TextField(
                         controller: _ctrl,
                         focusNode: _focus,
-                        onChanged: (v) {
-                          if (v.isEmpty) setState(() => _query = '');
-                        },
-                        onSubmitted: _search,
-                        style: GoogleFonts.inter(
-                            fontSize: 14, color: AppColors.textPrimary),
+                        onChanged: _onChanged,
+                        style: GoogleFonts.hankenGrotesk(fontSize: 14, color: rc.ink),
                         decoration: InputDecoration(
-                          hintText: l.searchHint,
-                          hintStyle: GoogleFonts.inter(
-                              fontSize: 13, color: AppColors.textHint),
-                          prefixIcon: const Icon(Icons.search_rounded,
-                              color: AppColors.textHint, size: 20),
-                          suffixIcon: _query.isNotEmpty || _ctrl.text.isNotEmpty
+                          hintText: S.get('searchHint'),
+                          hintStyle: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
+                          prefixIcon: Icon(Icons.search_rounded, color: rc.muted, size: 18),
+                          suffixIcon: _ctrl.text.isNotEmpty
                               ? GestureDetector(
                                   onTap: () {
                                     _ctrl.clear();
                                     setState(() => _query = '');
-                                    _focus.requestFocus();
+                                    _search();
                                   },
-                                  child: const Icon(Icons.close_rounded,
-                                      size: 18, color: AppColors.textHint),
+                                  child: Icon(Icons.close_rounded, size: 16, color: rc.muted),
                                 )
                               : null,
                           border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () => _showFilterSheet(context),
+                    onTap: () => _showFilters(context),
                     child: Container(
-                      width: 46,
-                      height: 46,
+                      width: 44, height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.tune_rounded,
-                          color: AppColors.onPrimary, size: 20),
+                        color: cAccent, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
                     ),
                   ),
                 ],
               ),
             ),
-            Container(height: 1, color: AppColors.border),
+            Container(height: 1, color: rc.line),
 
-            // ── Body ───────────────────────────────────────────────
-            Expanded(
-              child: showResults
-                  ? _ResultsView(
-                      results: results,
-                      query: _query,
-                      state: state,
-                    )
-                  : _SuggestionsView(
-                      recent: _recent,
-                      onSearch: _search,
-                      onClearRecent: _clearRecent,
+            // ── Category chips ────────────────────────────────────
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                children: [
+                  _CatChip(
+                    label: S.get('allCategories'),
+                    active: _category == 'all',
+                    onTap: () { setState(() => _category = 'all'); _search(); },
+                    rc: rc,
+                  ),
+                  ...kCategories.map((c) => Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: _CatChip(
+                      label: '${c.emoji} ${c.name}',
+                      active: _category == c.id,
+                      onTap: () { setState(() => _category = c.id); _search(); },
+                      rc: rc,
                     ),
+                  )),
+                ],
+              ),
+            ),
+            Container(height: 1, color: rc.line),
+
+            // ── Sort row ──────────────────────────────────────────
+            Container(
+              color: rc.card,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    _loading ? '...' : '${_results.length} ta natija',
+                    style: GoogleFonts.hankenGrotesk(fontSize: 12, color: rc.muted),
+                  ),
+                  const Spacer(),
+                  // Sort dropdown
+                  GestureDetector(
+                    onTap: () => _showSortSheet(context),
+                    child: Row(
+                      children: [
+                        Icon(Icons.sort_rounded, size: 16, color: rc.muted),
+                        const SizedBox(width: 4),
+                        Text(
+                          _sort == 'newest' ? S.get('sortNewest')
+                              : _sort == 'cheapest' ? S.get('sortCheap')
+                              : S.get('sortExpensive'),
+                          style: GoogleFonts.hankenGrotesk(
+                              fontSize: 12, fontWeight: FontWeight.w600, color: rc.ink),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Results ───────────────────────────────────────────
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: cAccent))
+                  : _results.isEmpty
+                      ? _Empty(rc: rc)
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: _results.length,
+                          itemBuilder: (ctx, i) {
+                            final l = _results[i];
+                            return ListingRow(
+                              listing: l,
+                              isFavorite: state.isFavorite(l.id),
+                              onTap: () => Navigator.of(ctx).push(
+                                MaterialPageRoute(
+                                    builder: (_) => ListingDetailScreen(listing: l)),
+                              ),
+                              onFavTap: () => state.toggleFavorite(l),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
@@ -210,7 +249,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  void _showFilterSheet(BuildContext context) {
+  void _showFilters(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -219,134 +258,61 @@ class _SearchScreenState extends State<SearchScreen> {
         minPrice: _minPrice,
         maxPrice: _maxPrice,
         condition: _condition,
-        sortBy: _sortBy,
-        onApply: (min, max, cond, sort) {
+        sellerType: _sellerType,
+        rc: RC.of(context),
+        onApply: (min, max, cond, sel) {
           setState(() {
             _minPrice = min;
             _maxPrice = max;
             _condition = cond;
-            _sortBy = sort;
+            _sellerType = sel;
           });
-          Navigator.pop(context);
-          if (_query.isNotEmpty) setState(() {});
+          _search();
         },
       ),
     );
   }
-}
 
-// ── Suggestions view ──────────────────────────────────────────
-
-class _SuggestionsView extends StatelessWidget {
-  final List<String> recent;
-  final ValueChanged<String> onSearch;
-  final VoidCallback onClearRecent;
-  const _SuggestionsView(
-      {required this.recent,
-      required this.onSearch,
-      required this.onClearRecent});
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-      children: [
-        // Recent
-        if (recent.isNotEmpty) ...[
-          Row(
-            children: [
-              Expanded(
-                child: Text(l.recentSearches,
-                    style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary)),
-              ),
-              GestureDetector(
-                onTap: onClearRecent,
-                child: Text(l.clearBtn,
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.primary)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: recent
-                .map((q) => _SearchChip(
-                    label: q,
-                    icon: Icons.history_rounded,
-                    onTap: () => onSearch(q)))
-                .toList(),
-          ),
-          const SizedBox(height: 24),
-        ],
-
-        // Popular
-        Text(l.popularSearches,
-            style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary)),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _kPopular
-              .map((q) => _SearchChip(
-                  label: q,
-                  icon: Icons.trending_up_rounded,
-                  accent: true,
-                  onTap: () => onSearch(q)))
-              .toList(),
-        ),
-      ],
-    );
-  }
-}
-
-class _SearchChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool accent;
-  final VoidCallback onTap;
-  const _SearchChip({
-    required this.label,
-    required this.icon,
-    this.accent = false,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+  void _showSortSheet(BuildContext context) {
+    final rc = RC.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
         decoration: BoxDecoration(
-          color: accent
-              ? AppColors.primary.withValues(alpha: 0.08)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color:
-                  accent ? AppColors.primary.withValues(alpha: 0.2) : AppColors.border),
+          color: rc.card,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 13,
-                color: accent ? AppColors.primary : AppColors.textHint),
-            const SizedBox(width: 5),
-            Text(label,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: accent ? AppColors.primary : AppColors.textPrimary,
-                    fontWeight: FontWeight.w500)),
+            Container(width: 36, height: 4, decoration: BoxDecoration(
+                color: rc.line, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            ...([
+              ('newest', S.get('sortNewest')),
+              ('cheapest', S.get('sortCheap')),
+              ('expensive', S.get('sortExpensive')),
+            ].map((s) => GestureDetector(
+              onTap: () {
+                setState(() => _sort = s.$1);
+                _search();
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  children: [
+                    Text(s.$2, style: GoogleFonts.hankenGrotesk(
+                        fontSize: 15, color: rc.ink, fontWeight: FontWeight.w500)),
+                    const Spacer(),
+                    if (_sort == s.$1)
+                      Icon(Icons.check_rounded, color: cAccent, size: 18),
+                  ],
+                ),
+              ),
+            ))),
           ],
         ),
       ),
@@ -354,92 +320,70 @@ class _SearchChip extends StatelessWidget {
   }
 }
 
-// ── Results view ──────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────
 
-class _ResultsView extends StatelessWidget {
-  final List<Listing> results;
-  final String query;
-  final AppState state;
-  const _ResultsView(
-      {required this.results, required this.query, required this.state});
-
+class _Empty extends StatelessWidget {
+  final RC rc;
+  const _Empty({required this.rc});
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    if (results.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.search_off_rounded,
-                size: 48, color: AppColors.textHint),
-            const SizedBox(height: 14),
-            Text(l.searchNotFound(query),
-                style: GoogleFonts.playfairDisplay(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 8),
-            Text(l.tryAnotherKeyword,
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textSecondary)),
-          ],
-        ),
-      );
-    }
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text('"$query"',
-                    style: GoogleFonts.playfairDisplay(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary)),
-              ),
-              Text(l.resultsCount(results.length),
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.textSecondary)),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 24),
-            itemCount: results.length,
-            itemBuilder: (ctx, i) {
-              final l = results[i];
-              return ListingRow(
-                listing: l,
-                onTap: () => Navigator.of(ctx).push(MaterialPageRoute(
-                    builder: (_) => ListingDetailScreen(listingId: l.id))),
-                onFavoriteTap: () => state.toggleFavorite(l.id),
-              );
-            },
-          ),
-        ),
-      ],
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off_rounded, size: 48, color: rc.muted),
+          const SizedBox(height: 12),
+          Text(S.get('noResults'),
+              style: GoogleFonts.spectral(
+                  fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
+        ],
+      ),
     );
   }
 }
 
-// ── Filter bottom sheet ───────────────────────────────────────
+// ── Category chip ─────────────────────────────────────────────
+
+class _CatChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final RC rc;
+  const _CatChip(
+      {required this.label, required this.active, required this.onTap, required this.rc});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? cAccent : rc.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: active ? cAccent : rc.line),
+        ),
+        child: Text(label,
+            style: GoogleFonts.hankenGrotesk(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : rc.ink)),
+      ),
+    );
+  }
+}
+
+// ── Filter sheet ──────────────────────────────────────────────
 
 class _FilterSheet extends StatefulWidget {
-  final double minPrice;
-  final double maxPrice;
-  final String condition;
-  final String sortBy;
+  final double minPrice, maxPrice;
+  final String condition, sellerType;
+  final RC rc;
   final void Function(double, double, String, String) onApply;
   const _FilterSheet({
-    required this.minPrice,
-    required this.maxPrice,
-    required this.condition,
-    required this.sortBy,
-    required this.onApply,
+    required this.minPrice, required this.maxPrice,
+    required this.condition, required this.sellerType,
+    required this.rc, required this.onApply,
   });
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
@@ -447,264 +391,125 @@ class _FilterSheet extends StatefulWidget {
 
 class _FilterSheetState extends State<_FilterSheet> {
   late double _min, _max;
-  late String _cond, _sort;
-  final _minCtrl = TextEditingController();
-  final _maxCtrl = TextEditingController();
+  late String _cond, _sel;
 
   @override
   void initState() {
     super.initState();
     _min = widget.minPrice;
     _max = widget.maxPrice;
-    _cond = widget.condition;  // 'all' | 'new' | 'used'
-    _sort = widget.sortBy;     // 'newest' | 'cheapest' | 'expensive'
-    _minCtrl.text = _min.toInt().toString();
-    _maxCtrl.text = _max.toInt().toString();
-  }
-
-  @override
-  void dispose() {
-    _minCtrl.dispose();
-    _maxCtrl.dispose();
-    super.dispose();
+    _cond = widget.condition;
+    _sel = widget.sellerType;
   }
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
+    final rc = widget.rc;
     return Container(
-      margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: rc.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: 8, bottom: 20),
-                decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2)),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(child: Container(
+            width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(color: rc.line, borderRadius: BorderRadius.circular(2)),
+          )),
+          Row(
+            children: [
+              Text(S.get('filterTitle'),
+                  style: GoogleFonts.spectral(fontSize: 20, fontWeight: FontWeight.w700, color: rc.ink)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () { setState(() { _min = 0; _max = 200000; _cond = 'all'; _sel = 'all'; }); },
+                child: Text(S.get('clearFilter'),
+                    style: GoogleFonts.hankenGrotesk(fontSize: 13, color: cAccent)),
               ),
-            ),
-            Text(l.filterTitle,
-                style: GoogleFonts.playfairDisplay(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 20),
-
-            // Price range
-            Text(l.priceRange,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            RangeSlider(
-              values: RangeValues(_min, _max),
-              min: 0,
-              max: 200000,
-              divisions: 400,
-              activeColor: AppColors.primary,
-              inactiveColor: AppColors.border,
-              onChanged: (v) {
-                setState(() {
-                  _min = v.start;
-                  _max = v.end;
-                  _minCtrl.text = v.start.toInt().toString();
-                  _maxCtrl.text = v.end.toInt().toString();
-                });
-              },
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: _PriceInput(
-                    label: l.priceFrom,
-                    ctrl: _minCtrl,
-                    onChanged: (v) =>
-                        setState(() => _min = double.tryParse(v) ?? _min),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _PriceInput(
-                    label: l.priceTo,
-                    ctrl: _maxCtrl,
-                    onChanged: (v) =>
-                        setState(() => _max = double.tryParse(v) ?? _max),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Condition
-            Text(l.conditionLabel,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            _ChipRow(
-              keys: const ['all', 'new', 'used'],
-              labels: [l.conditionAll, l.conditionNew, l.conditionUsed],
-              selected: _cond,
-              onSelect: (v) => setState(() => _cond = v),
-            ),
-            const SizedBox(height: 20),
-
-            // Sort
-            Text(l.sortLabel,
-                style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
-            const SizedBox(height: 10),
-            _ChipRow(
-              keys: const ['newest', 'cheapest', 'expensive'],
-              labels: [l.sortNewest, l.sortCheapest, l.sortExpensive],
-              selected: _sort,
-              onSelect: (v) => setState(() => _sort = v),
-            ),
-            const SizedBox(height: 24),
-
-            // Apply button
-            GestureDetector(
-              onTap: () => widget.onApply(_min, _max, _cond, _sort),
-              child: Container(
-                height: 52,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(26),
-                  boxShadow: [
-                    BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 5)),
-                  ],
-                ),
-                child: Center(
-                  child: Text(l.showResultsBtn,
-                      style: GoogleFonts.inter(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onPrimary)),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PriceInput extends StatelessWidget {
-  final String label;
-  final TextEditingController ctrl;
-  final ValueChanged<String> onChanged;
-  const _PriceInput(
-      {required this.label, required this.ctrl, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: GoogleFonts.inter(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500)),
-        const SizedBox(height: 4),
-        TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          onChanged: onChanged,
-          style: GoogleFonts.inter(
-              fontSize: 14, color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText: '0',
-            hintStyle: GoogleFonts.inter(
-                fontSize: 14, color: AppColors.textHint),
-            filled: true,
-            fillColor: AppColors.surfaceAlt,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: AppColors.primary, width: 1.5)),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 20),
+          // Price
+          Text(S.get('priceRange'),
+              style: GoogleFonts.hankenGrotesk(fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
+          RangeSlider(
+            values: RangeValues(_min, _max),
+            min: 0, max: 200000, divisions: 200,
+            activeColor: cAccent, inactiveColor: rc.line,
+            onChanged: (v) => setState(() { _min = v.start; _max = v.end; }),
+          ),
+          Row(
+            children: [
+              Text('\$${_min.toInt()}', style: GoogleFonts.hankenGrotesk(fontSize: 12, color: rc.muted)),
+              const Spacer(),
+              Text('\$${_max.toInt()}', style: GoogleFonts.hankenGrotesk(fontSize: 12, color: rc.muted)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Condition
+          Text(S.get('condition'),
+              style: GoogleFonts.hankenGrotesk(fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
+          const SizedBox(height: 8),
+          _ChipRow(keys: const ['all', 'new', 'used'],
+              labels: [S.get('conditionAll'), S.get('conditionNew'), S.get('conditionUsed')],
+              selected: _cond, onSelect: (v) => setState(() => _cond = v), rc: rc),
+          const SizedBox(height: 16),
+          // Seller type
+          Text(S.get('sellerType'),
+              style: GoogleFonts.hankenGrotesk(fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
+          const SizedBox(height: 8),
+          _ChipRow(keys: const ['all', 'individual', 'company'],
+              labels: [S.get('conditionAll'), S.get('individual'), S.get('company')],
+              selected: _sel, onSelect: (v) => setState(() => _sel = v), rc: rc),
+          const SizedBox(height: 24),
+          // Apply
+          GestureDetector(
+            onTap: () { widget.onApply(_min, _max, _cond, _sel); Navigator.pop(context); },
+            child: Container(
+              height: 50, width: double.infinity,
+              decoration: BoxDecoration(color: cAccent, borderRadius: BorderRadius.circular(14)),
+              child: Center(child: Text(S.get('showResults'),
+                  style: GoogleFonts.hankenGrotesk(
+                      fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white))),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _ChipRow extends StatelessWidget {
-  final List<String> keys;
-  final List<String> labels;
+  final List<String> keys, labels;
   final String selected;
   final ValueChanged<String> onSelect;
-  const _ChipRow({
-    required this.keys,
-    required this.labels,
-    required this.selected,
-    required this.onSelect,
-  });
-
+  final RC rc;
+  const _ChipRow({required this.keys, required this.labels, required this.selected,
+      required this.onSelect, required this.rc});
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: List.generate(keys.length, (i) {
-        final key = keys[i];
-        final label = labels[i];
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: () => onSelect(key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              decoration: BoxDecoration(
-                color: selected == key
-                    ? AppColors.primary
-                    : AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: selected == key
-                        ? AppColors.primary
-                        : AppColors.border),
-              ),
-              child: Text(label,
-                  style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: selected == key
-                          ? AppColors.onPrimary
-                          : AppColors.textPrimary)),
+      children: List.generate(keys.length, (i) => Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: () => onSelect(keys[i]),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected == keys[i] ? cAccent : rc.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: selected == keys[i] ? cAccent : rc.line),
             ),
+            child: Text(labels[i], style: GoogleFonts.hankenGrotesk(
+                fontSize: 12, fontWeight: FontWeight.w600,
+                color: selected == keys[i] ? Colors.white : rc.ink)),
           ),
-        );
-      }),
+        ),
+      )),
     );
   }
 }

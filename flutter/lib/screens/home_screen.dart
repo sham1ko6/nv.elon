@@ -1,396 +1,378 @@
-// ============================================================
-// screens/home_screen.dart  –  Premium marketplace feed
-// ============================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../app_theme.dart';
+import '../api.dart' as api;
 import '../app_state.dart';
 import '../l10n/strings.dart';
-import '../mock_data.dart';
+import '../models.dart';
+import '../theme.dart';
 import '../widgets/listing_card.dart';
+import '../widgets/ravoq_shield.dart';
 import 'listing_detail_screen.dart';
-import 'search_screen.dart';
 import 'notifications_screen.dart';
+import 'post_ad_screen.dart';
+import 'search_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Listing> _listings = [];
+  bool _loading = true;
+  String? _error;
+  String _activeCat = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final list = await api.getListings(
+        category: _activeCat == 'all' ? null : _activeCat,
+      );
+      if (mounted) setState(() { _listings = list; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  List<Listing> get _filtered {
+    if (_activeCat == 'all') return _listings;
+    return _listings.where((l) => l.category.toLowerCase() == _activeCat).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateProvider.of(context);
-    final filtered = state.filteredListings;
+    final rc = RC.of(context);
+    final state = AppStateScope.of(context);
+    final initials = state.user?['name']?.toString().isNotEmpty == true
+        ? state.user!['name'].toString().substring(0, 1).toUpperCase()
+        : '?';
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        bottom: false,
+      backgroundColor: rc.bg,
+      body: RefreshIndicator(
+        color: cAccent,
+        onRefresh: _load,
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // ── Header ─────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Container(
-                color: AppColors.surface,
-                padding:
-                    const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                child: Column(
+            // ── App bar ───────────────────────────────────────────
+            SliverAppBar(
+              floating: true,
+              backgroundColor: rc.card,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              titleSpacing: 0,
+              title: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        // Logo
-                        Text('nv.elon',
-                            style: GoogleFonts.playfairDisplay(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primary)),
-                        const SizedBox(width: 10),
-                        // Location pill
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.bg,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('📍',
-                                  style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 4),
-                              Text('Toshkent',
-                                  style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.textPrimary)),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.keyboard_arrow_down_rounded,
-                                  size: 14,
-                                  color: AppColors.textSecondary),
-                            ],
-                          ),
+                    // Logo
+                    RavoqShield(size: 22, color: cAccent, letterColor: Colors.white),
+                    const SizedBox(width: 7),
+                    Text('Ravoq.',
+                        style: GoogleFonts.spectral(
+                            fontSize: 20, fontWeight: FontWeight.w700, color: rc.accent)),
+                    const SizedBox(width: 10),
+                    // Location pill
+                    Expanded(
+                      child: Container(
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: rc.bg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: rc.line),
                         ),
-                        const Spacer(),
-                        // Bell
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const NotificationsScreen()),
-                          ),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppColors.bg,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppColors.border),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.location_on_rounded, size: 13, color: cAccent),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text('Toshkent sh.',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.hankenGrotesk(
+                                      fontSize: 12, fontWeight: FontWeight.w500, color: rc.ink)),
                             ),
-                            child: const Icon(
-                                Icons.notifications_none_rounded,
-                                color: AppColors.textPrimary,
-                                size: 20),
-                          ),
+                            const SizedBox(width: 2),
+                            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: rc.muted),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        // Avatar
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text('M',
-                                style: GoogleFonts.playfairDisplay(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onPrimary)),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 14),
-                    // Search bar (tap → SearchScreen)
+                    const SizedBox(width: 10),
+                    // Bell
                     GestureDetector(
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SearchScreen()),
+                        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                      ),
+                      child: Stack(
+                        children: [
+                          Icon(Icons.notifications_outlined, color: rc.ink, size: 24),
+                          Positioned(
+                            top: 0, right: 0,
+                            child: Container(
+                              width: 8, height: 8,
+                              decoration: const BoxDecoration(color: cAccent, shape: BoxShape.circle),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Avatar
+                    GestureDetector(
+                      onTap: () {},
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: const BoxDecoration(color: cAccent, shape: BoxShape.circle),
+                        child: Center(
+                          child: Text(initials,
+                              style: GoogleFonts.spectral(
+                                  fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: rc.line),
+              ),
+            ),
+
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  // ── Search bar ──────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SearchScreen()),
                       ),
                       child: Container(
-                        height: 48,
+                        height: 46,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceAlt,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
+                          color: rc.card,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: rc.line),
                         ),
                         child: Row(
                           children: [
                             const SizedBox(width: 14),
-                            const Icon(Icons.search_rounded,
-                                color: AppColors.textHint, size: 20),
-                            const SizedBox(width: 10),
+                            Icon(Icons.search_rounded, color: rc.muted, size: 20),
+                            const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                S.get('searchHint'),
-                                style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    color: AppColors.textHint),
-                              ),
+                              child: Text(S.get('searchHint'),
+                                  style: GoogleFonts.hankenGrotesk(
+                                      fontSize: 13, color: rc.muted)),
                             ),
                             Container(
-                              margin: const EdgeInsets.all(6),
-                              padding: const EdgeInsets.all(8),
+                              width: 36, height: 36,
+                              margin: const EdgeInsets.only(right: 5),
                               decoration: BoxDecoration(
-                                color: AppColors.primary,
+                                color: cAccent,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.tune_rounded,
-                                  color: AppColors.onPrimary, size: 16),
+                              child: GestureDetector(
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const SearchScreen()),
+                                ),
+                                child: const Icon(Icons.tune_rounded, color: Colors.white, size: 16),
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                  const SizedBox(height: 18),
 
-            // ── Category chips ─────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Container(
-                color: AppColors.surface,
-                padding: const EdgeInsets.only(bottom: 14),
-                child: SizedBox(
-                  height: 42,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
+                  // ── Story circles ───────────────────────────────
+                  SizedBox(
+                    height: 86,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        // Post ad circle
+                        _StoryCircle(
+                          child: Icon(Icons.add_rounded, color: rc.muted, size: 22),
+                          label: S.get('postAd'),
+                          isDashed: true,
+                          rc: rc,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const PostAdScreen()),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Category circles
+                        ...kCategories.map((cat) => Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: _StoryCircle(
+                            imageUrl: cat.imageUrl,
+                            label: cat.name,
+                            isDashed: false,
+                            rc: rc,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) =>
+                                SearchScreen(initialCategory: cat.id)),
+                            ),
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Category chips ──────────────────────────────
+                  SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        _Chip(label: S.get('allCategories'), active: _activeCat == 'all',
+                            onTap: () { setState(() => _activeCat = 'all'); _load(); }, rc: rc),
+                        ...kCategories.map((c) => Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: _Chip(
+                            label: '${c.emoji} ${c.name}',
+                            active: _activeCat == c.id,
+                            onTap: () { setState(() => _activeCat = c.id); _load(); },
+                            rc: rc,
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Hero banner ─────────────────────────────────
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: kCategories.length + 1,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (ctx, i) {
-                      final isAll = i == 0;
-                      final cat = isAll ? null : kCategories[i - 1];
-                      final selected = isAll
-                          ? state.selectedCategoryId.isEmpty
-                          : state.selectedCategoryId == cat!.id;
-                      final emoji = isAll ? '🔍' : cat!.icon;
-                      final label = isAll ? S.get('allCategories') : cat!.uzName;
-
-                      return GestureDetector(
-                        onTap: () =>
-                            state.setCategory(isAll ? '' : cat!.id),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 9),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: selected
-                                    ? AppColors.primary
-                                    : AppColors.border),
-                            boxShadow: selected ? kCardShadow : null,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(emoji,
-                                  style: const TextStyle(fontSize: 14)),
-                              const SizedBox(width: 6),
-                              Text(label,
-                                  style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: selected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: selected
-                                          ? AppColors.onPrimary
-                                          : AppColors.textPrimary)),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Hero banner ────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                child: Container(
-                  height: 128,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFFC2613B), Color(0xFF8B3A1A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.30),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8)),
-                    ],
-                  ),
-                  child: Stack(
-                    children: [
-                      // Decorative circles
-                      Positioned(
-                        right: -20,
-                        top: -20,
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: cAccent,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      Positioned(
-                        right: 20,
-                        bottom: -30,
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 100, 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              S.get('heroBannerTitle'),
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.onPrimary,
-                                height: 1.25,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              S.get('heroBannerSubtitle'),
-                              style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: Colors.white
-                                      .withValues(alpha: 0.78)),
-                            ),
-                            const SizedBox(height: 12),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        const SearchScreen()),
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: AppColors.onPrimary,
-                                  borderRadius:
-                                      BorderRadius.circular(20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  S.get('heroBanner'),
+                                  style: GoogleFonts.spectral(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    height: 1.3,
+                                  ),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(S.get('postAdBtn'),
-                                        style: GoogleFonts.inter(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.primary)),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.arrow_forward_rounded,
-                                        size: 14, color: AppColors.primary),
-                                  ],
+                                const SizedBox(height: 8),
+                                Text(
+                                  S.get('heroSub'),
+                                  style: GoogleFonts.hankenGrotesk(
+                                    fontSize: 11.5,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    height: 1.5,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 14),
+                                GestureDetector(
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const PostAdScreen()),
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(S.get('postAd'),
+                                        style: GoogleFonts.hankenGrotesk(
+                                            fontSize: 13, fontWeight: FontWeight.w700, color: cAccent)),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 12),
+                          const RavoqShield(size: 60, color: Colors.white),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 24),
+
+                  // ── Listings header ─────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Text(S.get('recommended'),
+                            style: GoogleFonts.spectral(
+                                fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const SearchScreen()),
+                          ),
+                          child: Text(S.get('seeAll'),
+                              style: GoogleFonts.hankenGrotesk(
+                                  fontSize: 13, fontWeight: FontWeight.w600, color: rc.accent)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
               ),
             ),
 
-            // ── Section header ─────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(S.get('listingsSectionTitle'),
-                        style: GoogleFonts.playfairDisplay(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary)),
-                    Text(S.itemCount(filtered.length),
-                        style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── Grid / loading / empty ──────────────────────────────
-            if (state.listingsLoading && state.listings.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    strokeWidth: 2.5,
-                  ),
+            // ── Listings grid ─────────────────────────────────────
+            if (_loading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator(color: cAccent)),
                 ),
               )
-            else if (filtered.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
+            else if (_error != null)
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 40),
+                  padding: const EdgeInsets.all(32),
                   child: Column(
                     children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                            color: AppColors.surfaceAlt,
-                            shape: BoxShape.circle),
-                        child: const Icon(Icons.search_off_rounded,
-                            size: 34, color: AppColors.textHint),
+                      Icon(Icons.wifi_off_rounded, color: cMuted, size: 40),
+                      const SizedBox(height: 10),
+                      Text(_error!, style: GoogleFonts.hankenGrotesk(color: cMuted)),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: _load,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                              color: cAccent, borderRadius: BorderRadius.circular(10)),
+                          child: Text('Qayta urinish',
+                              style: GoogleFonts.hankenGrotesk(
+                                  color: Colors.white, fontWeight: FontWeight.w600)),
+                        ),
                       ),
-                      const SizedBox(height: 14),
-                      Text(S.get('nothingFound'),
-                          style: GoogleFonts.playfairDisplay(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary)),
-                      const SizedBox(height: 8),
-                      Text(S.get('tryAnotherCategory'),
-                          style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -401,31 +383,119 @@ class HomeScreen extends StatelessWidget {
                 sliver: SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (ctx, i) {
-                      final item = filtered[i];
+                      final l = _filtered[i];
                       return ListingCard(
-                        listing: item,
+                        listing: l,
+                        isFavorite: state.isFavorite(l.id),
                         onTap: () => Navigator.of(ctx).push(
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  ListingDetailScreen(listingId: item.id)),
+                          MaterialPageRoute(builder: (_) => ListingDetailScreen(listing: l)),
                         ),
-                        onFavoriteTap: () =>
-                            state.toggleFavorite(item.id),
-                        onCallTap: () {},
+                        onFavTap: () => state.toggleFavorite(l),
                       );
                     },
-                    childCount: filtered.length,
+                    childCount: _filtered.length,
                   ),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
                     childAspectRatio: 0.68,
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Story circle ──────────────────────────────────────────────
+
+class _StoryCircle extends StatelessWidget {
+  final Widget? child;
+  final String? imageUrl;
+  final String label;
+  final bool isDashed;
+  final RC rc;
+  final VoidCallback onTap;
+
+  const _StoryCircle({
+    this.child,
+    this.imageUrl,
+    required this.label,
+    required this.isDashed,
+    required this.rc,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 62,
+        child: Column(
+          children: [
+            Container(
+              width: 62, height: 62,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: rc.card,
+                border: isDashed
+                    ? Border.all(color: rc.line, width: 1.5)
+                    : Border.all(color: rc.line, width: 2),
+              ),
+              child: ClipOval(
+                child: imageUrl != null && imageUrl!.isNotEmpty
+                    ? Image.network(imageUrl!, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(child: Icon(Icons.photo, color: rc.muted, size: 20)))
+                    : child,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.hankenGrotesk(fontSize: 9, color: rc.ink),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Category chip ─────────────────────────────────────────────
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final RC rc;
+  const _Chip({required this.label, required this.active, required this.onTap, required this.rc});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? cAccent : rc.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? cAccent : rc.line),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.hankenGrotesk(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : rc.ink,
+          ),
         ),
       ),
     );

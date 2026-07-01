@@ -1,60 +1,30 @@
-// ============================================================
-// main.dart  –  nv.elon App Entry Point
-// ============================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'app_theme.dart';
 import 'app_state.dart';
+import 'theme.dart';
 import 'screens/splash_screen.dart';
-import 'screens/auth_screen.dart';
-import 'screens/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-
-  // Restore saved token + user from disk, then kick off background fetches.
-  final appState = AppState();
-  await appState.init();
-
-  runApp(NvElonApp(appState: appState));
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  final state = AppState();
+  await state.init();
+  runApp(AppStateScope(notifier: state, child: const RavoqApp()));
 }
 
-class NvElonApp extends StatelessWidget {
-  final AppState appState;
-  const NvElonApp({super.key, required this.appState});
+class RavoqApp extends StatelessWidget {
+  const RavoqApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AppStateProvider(
-      state: appState,
-      child: ListenableBuilder(
-        listenable: appState,
-        builder: (ctx, _) {
-          return MaterialApp(
-            title: 'nv.elon',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            locale: appState.locale,
-            initialRoute: '/splash',
-            routes: {
-              '/splash': (_) => const SplashScreen(),
-              '/auth': (_) => const AuthScreen(),
-              '/home': (_) => const MainShell(),
-            },
-          );
-        },
-      ),
+    final state = AppStateScope.of(context);
+    return MaterialApp(
+      title: 'Ravoq',
+      debugShowCheckedModeBanner: false,
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: state.themeMode,
+      home: const SplashScreen(),
     );
   }
 }

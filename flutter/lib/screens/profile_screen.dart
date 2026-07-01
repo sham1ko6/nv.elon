@@ -1,16 +1,10 @@
-// ============================================================
-// screens/profile_screen.dart  –  Premium kabinet
-// ============================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../app_theme.dart';
 import '../app_state.dart';
-import '../l10n/app_localizations.dart';
-import '../models.dart';
-import '../widgets/listing_card.dart';
-import '../mock_data.dart';
-import 'listing_detail_screen.dart';
-import 'edit_profile_screen.dart';
+import '../l10n/strings.dart';
+import '../theme.dart';
+import '../widgets/ravoq_shield.dart';
+import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,16 +15,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) AppStateProvider.of(context).loadMyListings();
-    });
   }
-
   @override
   void dispose() {
     _tabs.dispose();
@@ -39,450 +28,404 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateProvider.of(context);
-    final l = AppLocalizations.of(context);
-    final user = state.currentUser ??
-        const AppUser(
-          name: 'Mehmon',
-          phone: '+998 90 000 00 00',
-          role: 'seller',
-          initials: 'M',
-        );
-    final myListings =
-        state.isLoggedIn ? state.myListings : kGuestMyListings;
-    final totalViews =
-        state.listings.fold<int>(0, (s, listing) => s + listing.views);
+    final rc = RC.of(context);
+    final state = AppStateScope.of(context);
+
+    if (!state.isLoggedIn) return _LoginPrompt(rc: rc);
+
+    final user = state.user ?? {};
+    final name = user['name']?.toString() ?? 'Foydalanuvchi';
+    final phone = user['phone']?.toString() ?? '';
+    final initials = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: NestedScrollView(
-        headerSliverBuilder: (ctx, _) => [
+      backgroundColor: rc.bg,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // ── Header ──────────────────────────────────────────
           SliverToBoxAdapter(
             child: Container(
-              color: AppColors.surface,
+              color: cAccent,
+              padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
               child: Column(
                 children: [
-                  // ── Top row ──────────────────────────────────────
-                  SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(l.profileTitle,
-                                style: GoogleFonts.playfairDisplay(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary)),
-                          ),
-                          _IconCircle(
-                            icon: Icons.edit_rounded,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) =>
-                                      const EditProfileScreen()),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _IconCircle(
-                            icon: Icons.logout_rounded,
-                            iconColor: AppColors.danger,
-                            onTap: () => state.logout(),
-                          ),
-                        ],
-                      ),
+                  // Avatar
+                  Container(
+                    width: 76, height: 76,
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: Center(
+                      child: Text(initials,
+                          style: GoogleFonts.spectral(
+                              fontSize: 30, fontWeight: FontWeight.w700, color: cAccent)),
                     ),
                   ),
-
-                  // ── Avatar + name ─────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                    child: Column(
+                  const SizedBox(height: 12),
+                  Text(name, style: GoogleFonts.spectral(
+                      fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                  if (phone.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(phone, style: GoogleFonts.hankenGrotesk(
+                        fontSize: 13, color: Colors.white.withValues(alpha: 0.8))),
+                  ],
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(user.initials,
-                                style: GoogleFonts.playfairDisplay(
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onPrimary)),
+                        const Icon(Icons.verified_rounded, size: 13, color: Colors.white),
+                        const SizedBox(width: 5),
+                        Text(S.get('verified'),
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFFD700)),
+                        const SizedBox(width: 3),
+                        Text('4.8', style: GoogleFonts.hankenGrotesk(
+                            fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Stats row ────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              color: rc.card,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                children: [
+                  _StatItem(label: S.get('myAds'), value: '12', rc: rc),
+                  _Divider(),
+                  _StatItem(label: S.get('views'), value: '3.4K', rc: rc),
+                  _Divider(),
+                  _StatItem(label: S.get('rating'), value: '4.8', rc: rc),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Wallet card ──────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2C1810), Color(0xFF4A2A18)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(S.get('balance'),
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 12, color: Colors.white.withValues(alpha: 0.75))),
+                        const SizedBox(height: 6),
+                        Text('125,000 so\'m',
+                            style: GoogleFonts.spectral(
+                                fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ],
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {},
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: cAmber,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(S.get('recharge'),
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 13, fontWeight: FontWeight.w700,
+                                color: const Color(0xFF3A2000))),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── My ads tabs ──────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(S.get('myAds'),
+                      style: GoogleFonts.spectral(
+                          fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  color: rc.card,
+                  child: TabBar(
+                    controller: _tabs,
+                    labelColor: cAccent,
+                    unselectedLabelColor: rc.muted,
+                    indicatorColor: cAccent,
+                    labelStyle: GoogleFonts.hankenGrotesk(
+                        fontSize: 13, fontWeight: FontWeight.w700),
+                    unselectedLabelStyle: GoogleFonts.hankenGrotesk(fontSize: 13),
+                    tabs: [
+                      Tab(text: S.get('active')),
+                      Tab(text: S.get('sold')),
+                      Tab(text: S.get('archived')),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  height: 120,
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _EmptyTab(label: "${S.get('active')} ${S.get('myAds').toLowerCase()}", rc: rc),
+                      _EmptyTab(label: "${S.get('sold')}", rc: rc),
+                      _EmptyTab(label: S.get('archived'), rc: rc),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Settings ─────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(S.get('language'),
+                      style: GoogleFonts.hankenGrotesk(
+                          fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (final l in [('uz', '🇺🇿 UZ'), ('ru', '🇷🇺 RU'), ('en', '🇬🇧 EN')])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: () => state.setLang(l.$1),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: state.lang == l.$1 ? cAccent : rc.card,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                    color: state.lang == l.$1 ? cAccent : rc.line),
+                              ),
+                              child: Text(l.$2,
+                                  style: GoogleFonts.hankenGrotesk(
+                                      fontSize: 13, fontWeight: FontWeight.w600,
+                                      color: state.lang == l.$1 ? Colors.white : rc.ink)),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(user.name,
-                            style: GoogleFonts.playfairDisplay(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary)),
-                        const SizedBox(height: 4),
-                        Text(user.phone,
-                            style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: AppColors.textSecondary)),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+                    ],
                   ),
-
-                  // ── Stats row ─────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    child: Row(
-                      children: [
-                        _StatCell(
-                            value: '${myListings.length}',
-                            label: l.listingsStat),
-                        _Divider(),
-                        _StatCell(
-                            value: '${totalViews ~/ 1000}K',
-                            label: l.viewsStat),
-                        _Divider(),
-                        _StatCell(
-                            value: '4.8',
-                            label: l.ratingStat,
-                            trailing: const Icon(Icons.star_rounded,
-                                size: 12, color: AppColors.amber)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Language switcher ────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    child: Row(
-                      children: [
-                        Text(l.languageLabel,
-                            style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary)),
-                        const SizedBox(width: 12),
-                        ...['uz', 'ru', 'en'].map((code) {
-                          final selected =
-                              state.locale.languageCode == code;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: GestureDetector(
-                              onTap: () =>
-                                  state.setLocale(Locale(code)),
-                              child: AnimatedContainer(
-                                duration:
-                                    const Duration(milliseconds: 180),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? AppColors.primary
-                                      : AppColors.surfaceAlt,
-                                  borderRadius:
-                                      BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: selected
-                                          ? AppColors.primary
-                                          : AppColors.border),
-                                ),
-                                child: Text(code.toUpperCase(),
-                                    style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: selected
-                                            ? AppColors.onPrimary
-                                            : AppColors.textPrimary)),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Wallet card ──────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: AppColors.primaryGradient,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.account_balance_wallet_rounded,
-                              color: Colors.white70, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(l.walletBalance,
-                                    style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        color: Colors.white70)),
-                                Text('\$0.00',
-                                    style: GoogleFonts.playfairDisplay(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white)),
-                              ],
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {},
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
+                  const SizedBox(height: 18),
+                  Text(S.get('theme'),
+                      style: GoogleFonts.hankenGrotesk(
+                          fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (final t in [
+                        (ThemeMode.light, S.get('light')),
+                        (ThemeMode.dark, S.get('dark')),
+                        (ThemeMode.system, S.get('system')),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: () => state.setThemeMode(t.$1),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color:
-                                    Colors.white.withValues(alpha: 0.22),
-                                borderRadius: BorderRadius.circular(20),
+                                color: state.themeMode == t.$1 ? cAccent : rc.card,
+                                borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
-                                    color: Colors.white
-                                        .withValues(alpha: 0.35)),
+                                    color: state.themeMode == t.$1 ? cAccent : rc.line),
                               ),
-                              child: Text(l.topUpBtn,
-                                  style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white)),
+                              child: Text(t.$2,
+                                  style: GoogleFonts.hankenGrotesk(
+                                      fontSize: 13, fontWeight: FontWeight.w600,
+                                      color: state.themeMode == t.$1 ? Colors.white : rc.ink)),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // ── Tab bar ───────────────────────────────────────
-                  TabBar(
-                    controller: _tabs,
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    indicatorColor: AppColors.primary,
-                    indicatorWeight: 2,
-                    dividerColor: AppColors.border,
-                    labelStyle: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w700),
-                    unselectedLabelStyle:
-                        GoogleFonts.inter(fontSize: 13),
-                    tabs: [
-                      Tab(text: l.activeTab(myListings.length)),
-                      Tab(text: l.pendingTab),
-                      Tab(text: l.archiveTab),
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
           ),
-        ],
-        body: TabBarView(
-          controller: _tabs,
-          children: [
-            _ListingGrid(
-                listings: myListings, state: state, status: 'active'),
-            _EmptyState(
-                icon: Icons.hourglass_top_rounded,
-                msg: l.noPendingListings),
-            _EmptyState(
-                icon: Icons.archive_rounded,
-                msg: l.noArchiveListings),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-// ── Tab view for my listings ──────────────────────────────────
-
-class _ListingGrid extends StatelessWidget {
-  final List<Listing> listings;
-  final AppState state;
-  final String status;
-  const _ListingGrid(
-      {required this.listings, required this.state, required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    if (listings.isEmpty) {
-      return _EmptyState(
-          icon: Icons.post_add_rounded,
-          msg: AppLocalizations.of(context).noMyListings);
-    }
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 14,
-        childAspectRatio: 0.65,
-      ),
-      itemCount: listings.length,
-      itemBuilder: (ctx, i) {
-        final l = listings[i];
-        return Stack(
-          children: [
-            ListingCard(
-              listing: l,
-              onTap: () => Navigator.of(ctx).push(
-                MaterialPageRoute(
-                    builder: (_) =>
-                        ListingDetailScreen(listingId: l.id)),
+          // ── Menu items ────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                children: [
+                  _MenuItem(
+                    icon: Icons.notifications_outlined,
+                    label: S.get('notifications'),
+                    onTap: () {},
+                    rc: rc,
+                  ),
+                  _MenuItem(
+                    icon: Icons.help_outline_rounded,
+                    label: 'Yordam',
+                    onTap: () {},
+                    rc: rc,
+                  ),
+                  _MenuItem(
+                    icon: Icons.description_outlined,
+                    label: 'Foydalanish shartlari',
+                    onTap: () {},
+                    rc: rc,
+                  ),
+                  const SizedBox(height: 8),
+                  // Logout
+                  GestureDetector(
+                    onTap: () {
+                      state.logout();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
+                          const SizedBox(width: 12),
+                          Text(S.get('logout'),
+                              style: GoogleFonts.hankenGrotesk(
+                                  fontSize: 14, fontWeight: FontWeight.w600,
+                                  color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                ],
               ),
-              onFavoriteTap: () => state.toggleFavorite(l.id),
-              onCallTap: () {},
             ),
-            // Status badge
-            Positioned(
-              bottom: 8,
-              left: 8,
-              child: _StatusBadge(status: l.status),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    String label;
-    final l = AppLocalizations.of(context);
-    switch (status) {
-      case 'pending':
-        color = AppColors.star;
-        label = l.statusPending;
-        break;
-      case 'expired':
-        color = AppColors.danger;
-        label = l.statusExpired;
-        break;
-      default:
-        color = AppColors.success;
-        label = l.statusActive;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(label,
-          style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: 0.3)),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String msg;
-  const _EmptyState({required this.icon, required this.msg});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-                color: AppColors.surfaceAlt, shape: BoxShape.circle),
-            child: Icon(icon, size: 32, color: AppColors.textHint),
           ),
-          const SizedBox(height: 14),
-          Text(msg,
-              style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary)),
         ],
       ),
     );
   }
 }
 
-// ── Helper widgets ────────────────────────────────────────────
+// ── Not logged in ─────────────────────────────────────────────
 
-class _IconCircle extends StatelessWidget {
-  final IconData icon;
-  final Color? iconColor;
-  final VoidCallback onTap;
-  const _IconCircle({required this.icon, this.iconColor, required this.onTap});
-
+class _LoginPrompt extends StatelessWidget {
+  final RC rc;
+  const _LoginPrompt({required this.rc});
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.bg,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.border),
+    return Scaffold(
+      backgroundColor: rc.bg,
+      appBar: AppBar(
+        backgroundColor: rc.card,
+        title: Row(
+          children: [
+            RavoqShield(size: 20, color: cAccent, letterColor: Colors.white),
+            const SizedBox(width: 7),
+            Text('Ravoq.', style: GoogleFonts.spectral(
+                fontSize: 18, fontWeight: FontWeight.w700, color: cAccent)),
+          ],
         ),
-        child: Icon(icon,
-            size: 18,
-            color: iconColor ?? AppColors.textSecondary),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: rc.line),
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                    color: cAccent.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: Icon(Icons.person_outline_rounded, size: 40, color: cAccent),
+              ),
+              const SizedBox(height: 20),
+              Text(S.get('loginRequired'),
+                  style: GoogleFonts.spectral(
+                      fontSize: 22, fontWeight: FontWeight.w700, color: rc.ink)),
+              const SizedBox(height: 8),
+              Text(S.get('loginToAccess'),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted)),
+              const SizedBox(height: 28),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AuthScreen()),
+                ),
+                child: Container(
+                  height: 50, width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: cAccent, borderRadius: BorderRadius.circular(14),
+                    boxShadow: [BoxShadow(
+                        color: cAccent.withValues(alpha: 0.35), blurRadius: 14,
+                        offset: const Offset(0, 6))],
+                  ),
+                  child: Center(
+                    child: Text(S.get('loginBtn'),
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _StatCell extends StatelessWidget {
-  final String value;
-  final String label;
-  final Widget? trailing;
-  const _StatCell(
-      {required this.value, required this.label, this.trailing});
-
+class _StatItem extends StatelessWidget {
+  final String label, value;
+  final RC rc;
+  const _StatItem({required this.label, required this.value, required this.rc});
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(value,
-                  style: GoogleFonts.playfairDisplay(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary)),
-              if (trailing != null) ...[
-                const SizedBox(width: 3),
-                trailing!,
-              ],
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(label,
-              style: GoogleFonts.inter(
-                  fontSize: 11, color: AppColors.textSecondary)),
+          Text(value, style: GoogleFonts.spectral(
+              fontSize: 20, fontWeight: FontWeight.w700, color: rc.accent)),
+          const SizedBox(height: 3),
+          Text(label, style: GoogleFonts.hankenGrotesk(fontSize: 11, color: rc.muted)),
         ],
       ),
     );
@@ -492,10 +435,50 @@ class _StatCell extends StatelessWidget {
 class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 36,
-      color: AppColors.border,
+    return Container(width: 1, height: 32, color: RC.of(context).line);
+  }
+}
+
+class _EmptyTab extends StatelessWidget {
+  final String label;
+  final RC rc;
+  const _EmptyTab({required this.label, required this.rc});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        '$label yo\'q',
+        style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
+      ),
+    );
+  }
+}
+
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final RC rc;
+  const _MenuItem(
+      {required this.icon, required this.label, required this.onTap, required this.rc});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: rc.line))),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: rc.muted),
+            const SizedBox(width: 12),
+            Text(label, style: GoogleFonts.hankenGrotesk(
+                fontSize: 14, fontWeight: FontWeight.w500, color: rc.ink)),
+            const Spacer(),
+            Icon(Icons.chevron_right_rounded, size: 18, color: rc.muted),
+          ],
+        ),
+      ),
     );
   }
 }

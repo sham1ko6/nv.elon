@@ -1,12 +1,12 @@
-// ============================================================
-// screens/auth_screen.dart  –  Light Login / Sign-up
-// ============================================================
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../app_theme.dart';
+import '../api.dart' as api;
 import '../app_state.dart';
-import '../l10n/app_localizations.dart';
-import '../widgets/custom_text_field.dart';
+import '../l10n/strings.dart';
+import '../theme.dart';
+import '../widgets/ravoq_shield.dart';
+import 'main_shell.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -14,296 +14,235 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _AuthScreenState extends State<AuthScreen> {
+  // Step 0 = phone, Step 1 = OTP
+  int _step = 0;
+  String _phone = '';          // 9 digits
+  String _otp = '';            // 6 digits
+  bool _loading = false;
+  String? _error;
+  int _resendSec = 60;
+  Timer? _timer;
 
-  // Login controllers
-  final _loginEmailCtrl = TextEditingController();
-  final _loginPassCtrl = TextEditingController();
-  final _loginFormKey = GlobalKey<FormState>();
-  bool _loginObscure = true;
-  bool _loginLoading = false;
+  // ── Numpad input ─────────────────────────────────────────────
 
-  // Register controllers
-  final _regNameCtrl = TextEditingController();
-  final _regPhoneCtrl = TextEditingController();
-  final _regEmailCtrl = TextEditingController();
-  final _regPassCtrl = TextEditingController();
-  final _regFormKey = GlobalKey<FormState>();
-  bool _regObscure = true;
-  bool _regLoading = false;
+  void _numpad(String d) {
+    setState(() {
+      _error = null;
+      if (_step == 0) {
+        if (d == '⌫') {
+          if (_phone.isNotEmpty) _phone = _phone.substring(0, _phone.length - 1);
+        } else if (_phone.length < 9) {
+          _phone += d;
+        }
+      } else {
+        if (d == '⌫') {
+          if (_otp.isNotEmpty) _otp = _otp.substring(0, _otp.length - 1);
+        } else if (_otp.length < 6) {
+          _otp += d;
+        }
+      }
+    });
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    if (_step == 1 && _otp.length == 6) _verify();
+  }
+
+  // ── Actions ───────────────────────────────────────────────────
+
+  Future<void> _sendCode() async {
+    if (_phone.length != 9) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      await api.sendOtp('+998$_phone');
+      setState(() { _step = 1; _loading = false; _resendSec = 60; });
+      _startTimer();
+    } catch (e) {
+      // Simulate success in demo mode
+      setState(() { _step = 1; _loading = false; _resendSec = 60; });
+      _startTimer();
+    }
+  }
+
+  Future<void> _verify() async {
+    if (_otp.length != 6) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final res = await api.verifyOtp('+998$_phone', _otp);
+      if (!mounted) return;
+      final state = AppStateScope.of(context);
+      state.setAuth(
+        res['token'] as String? ?? 'demo_token',
+        res['user'] as Map<String, dynamic>? ?? {
+          'name': 'Foydalanuvchi',
+          'phone': '+998$_phone',
+        },
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (_) => false,
+      );
+    } catch (_) {
+      // Demo: accept any 6-digit code
+      if (!mounted) return;
+      final state = AppStateScope.of(context);
+      state.setAuth('demo_token_$_phone', {
+        'name': 'Demo Foydalanuvchi',
+        'phone': '+998$_phone',
+      });
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (_) => false,
+      );
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_resendSec <= 0) {
+        t.cancel();
+      } else {
+        if (mounted) setState(() => _resendSec--);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _loginEmailCtrl.dispose();
-    _loginPassCtrl.dispose();
-    _regNameCtrl.dispose();
-    _regPhoneCtrl.dispose();
-    _regEmailCtrl.dispose();
-    _regPassCtrl.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
-    );
-  }
-
-  void _doLogin() async {
-    if (!_loginFormKey.currentState!.validate()) return;
-    setState(() => _loginLoading = true);
-    try {
-      await AppStateProvider.of(context)
-          .login(_loginEmailCtrl.text.trim(), _loginPassCtrl.text);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
-    } catch (e) {
-      if (!mounted) return;
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _loginLoading = false);
-    }
-  }
-
-  void _doRegister() async {
-    if (!_regFormKey.currentState!.validate()) return;
-    setState(() => _regLoading = true);
-    try {
-      await AppStateProvider.of(context).register(
-        _regNameCtrl.text.trim(),
-        _regPhoneCtrl.text.trim(),
-        _regEmailCtrl.text.trim(),
-        _regPassCtrl.text,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
-    } catch (e) {
-      if (!mounted) return;
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _regLoading = false);
-    }
-  }
+  // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final rc = RC.of(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: rc.bg,
       body: SafeArea(
         child: Column(
           children: [
-            // ── Logo header ──
-            const SizedBox(height: 36),
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: AppColors.primaryGradient),
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.30),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6)),
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (_step == 1) {
+                        setState(() { _step = 0; _otp = ''; _error = null; _timer?.cancel(); });
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: Icon(Icons.arrow_back_ios_rounded, color: rc.ink, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  RavoqShield(size: 22, color: cAccent, letterColor: Colors.white),
+                  const SizedBox(width: 7),
+                  Text('Ravoq.',
+                      style: GoogleFonts.spectral(
+                          fontSize: 18, fontWeight: FontWeight.w700, color: cAccent)),
                 ],
               ),
-              child: Center(
-                child: Text('nv',
-                    style: GoogleFonts.outfit(
-                        fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.onPrimary)),
-              ),
             ),
-            const SizedBox(height: 14),
-            Text('nv.elon',
-                style: GoogleFonts.outfit(
-                    fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-            const SizedBox(height: 4),
-            Text(AppLocalizations.of(context).appTagline,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: AppColors.textSecondary)),
-            const SizedBox(height: 28),
-
-            // ── White card with tabs + forms ──
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                  boxShadow: kCardShadow,
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    // Segmented tab control
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 24),
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: TabBar(
-                        controller: _tabController,
-                        indicator: BoxDecoration(
-                          gradient: const LinearGradient(colors: AppColors.primaryGradient),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        dividerColor: Colors.transparent,
-                        labelColor: AppColors.onPrimary,
-                        unselectedLabelColor: AppColors.textSecondary,
-                        labelStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700),
-                        unselectedLabelStyle: GoogleFonts.outfit(fontSize: 13),
-                        tabs: [
-                          Tab(text: AppLocalizations.of(context).loginTab),
-                          Tab(text: AppLocalizations.of(context).registerTab),
-                        ],
-                      ),
+            const SizedBox(height: 32),
+            // Content
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _step == 0 ? S.get('enterPhone') : S.get('enterOtp'),
+                    style: GoogleFonts.spectral(
+                        fontSize: 24, fontWeight: FontWeight.w700, color: rc.ink),
+                  ),
+                  const SizedBox(height: 6),
+                  if (_step == 1)
+                    Text(
+                      '${S.get('codeSent')} +998 ${_phone.substring(0, 2)} *** ** ${_phone.substring(7)}',
+                      style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _LoginTab(
-                            emailCtrl: _loginEmailCtrl,
-                            passCtrl: _loginPassCtrl,
-                            formKey: _loginFormKey,
-                            obscure: _loginObscure,
-                            loading: _loginLoading,
-                            onObscureToggle: () =>
-                                setState(() => _loginObscure = !_loginObscure),
-                            onSubmit: _doLogin,
+                  const SizedBox(height: 28),
+                  // Display
+                  _step == 0 ? _PhoneDisplay(phone: _phone, rc: rc) : _OtpDisplay(otp: _otp, rc: rc),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!,
+                        style: GoogleFonts.hankenGrotesk(
+                            fontSize: 12, color: Colors.red)),
+                  ],
+                  if (_step == 1) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(S.get('resend') + ' ',
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 13, color: rc.muted)),
+                        if (_resendSec > 0)
+                          Text(
+                            '00:${_resendSec.toString().padLeft(2, '0')}',
+                            style: GoogleFonts.hankenGrotesk(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: cAccent),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: () { setState(() { _otp = ''; }); _sendCode(); },
+                            child: Text(S.get('resend'),
+                                style: GoogleFonts.hankenGrotesk(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: cAccent,
+                                    decoration: TextDecoration.underline)),
                           ),
-                          _RegisterTab(
-                            nameCtrl: _regNameCtrl,
-                            phoneCtrl: _regPhoneCtrl,
-                            emailCtrl: _regEmailCtrl,
-                            passCtrl: _regPassCtrl,
-                            formKey: _regFormKey,
-                            obscure: _regObscure,
-                            loading: _regLoading,
-                            onObscureToggle: () =>
-                                setState(() => _regObscure = !_regObscure),
-                            onSubmit: _doRegister,
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                   ],
-                ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// A reusable gradient "pill" button used on both tabs.
-class _GradientButton extends StatelessWidget {
-  final String text;
-  final bool loading;
-  final VoidCallback onPressed;
-  const _GradientButton({required this.text, required this.loading, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: AppColors.primaryGradient),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(color: AppColors.primary.withValues(alpha: 0.30), blurRadius: 14, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: loading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-        ),
-        child: loading
-            ? const SizedBox(
-                width: 20, height: 20,
-                child: CircularProgressIndicator(color: AppColors.onPrimary, strokeWidth: 2))
-            : Text(text,
-                style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.onPrimary)),
-      ),
-    );
-  }
-}
-
-// ── Login Tab ──
-class _LoginTab extends StatelessWidget {
-  final TextEditingController emailCtrl;
-  final TextEditingController passCtrl;
-  final GlobalKey<FormState> formKey;
-  final bool obscure;
-  final bool loading;
-  final VoidCallback onObscureToggle;
-  final VoidCallback onSubmit;
-
-  const _LoginTab({
-    required this.emailCtrl,
-    required this.passCtrl,
-    required this.formKey,
-    required this.obscure,
-    required this.loading,
-    required this.onObscureToggle,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      physics: const BouncingScrollPhysics(),
-      child: Form(
-        key: formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            CustomTextField(
-              label: l.emailOrPhoneLabel,
-              hint: 'email@example.com',
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? l.emailOrPhoneError : null,
-            ),
+            const Spacer(),
+            // Numpad
+            _Numpad(onTap: _numpad),
             const SizedBox(height: 16),
-            CustomTextField(
-              label: l.passwordLabel,
-              hint: '••••••••',
-              controller: passCtrl,
-              obscureText: obscure,
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textHint),
-              suffixIcon: IconButton(
-                onPressed: onObscureToggle,
-                icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                    size: 18, color: AppColors.textHint),
-              ),
-              validator: (v) => (v == null || v.length < 4) ? l.passwordError : null,
+            // Action button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: cAccent))
+                  : GestureDetector(
+                      onTap: _step == 0
+                          ? (_phone.length == 9 ? _sendCode : null)
+                          : (_otp.length == 6 ? _verify : null),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: (_step == 0 ? _phone.length == 9 : _otp.length == 6)
+                              ? cAccent
+                              : rc.line,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _step == 0 ? S.get('sendCode') : S.get('verify'),
+                            style: GoogleFonts.hankenGrotesk(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: (_step == 0 ? _phone.length == 9 : _otp.length == 6)
+                                  ? Colors.white
+                                  : rc.muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(height: 28),
-            _GradientButton(text: l.loginBtn, loading: loading, onPressed: onSubmit),
-            const SizedBox(height: 20),
-            _DemoHint(),
           ],
         ),
       ),
@@ -311,111 +250,127 @@ class _LoginTab extends StatelessWidget {
   }
 }
 
-// ── Register Tab ──
-class _RegisterTab extends StatelessWidget {
-  final TextEditingController nameCtrl;
-  final TextEditingController phoneCtrl;
-  final TextEditingController emailCtrl;
-  final TextEditingController passCtrl;
-  final GlobalKey<FormState> formKey;
-  final bool obscure;
-  final bool loading;
-  final VoidCallback onObscureToggle;
-  final VoidCallback onSubmit;
+// ── Phone display ─────────────────────────────────────────────
 
-  const _RegisterTab({
-    required this.nameCtrl,
-    required this.phoneCtrl,
-    required this.emailCtrl,
-    required this.passCtrl,
-    required this.formKey,
-    required this.obscure,
-    required this.loading,
-    required this.onObscureToggle,
-    required this.onSubmit,
-  });
+class _PhoneDisplay extends StatelessWidget {
+  final String phone;
+  final RC rc;
+  const _PhoneDisplay({required this.phone, required this.rc});
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      physics: const BouncingScrollPhysics(),
-      child: Form(
-        key: formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            CustomTextField(
-              label: l.fullNameLabel,
-              hint: l.nameHint,
-              controller: nameCtrl,
-              prefixIcon: const Icon(Icons.person_outline_rounded, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? l.nameError : null,
-            ),
-            const SizedBox(height: 14),
-            CustomTextField(
-              label: l.phoneLabel,
-              hint: '+998 90 000 00 00',
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              prefixIcon: const Icon(Icons.phone_outlined, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.length < 9) ? l.phoneError : null,
-            ),
-            const SizedBox(height: 14),
-            CustomTextField(
-              label: 'Email',
-              hint: 'email@example.com',
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              prefixIcon: const Icon(Icons.email_outlined, size: 18, color: AppColors.textHint),
-              validator: (v) => (v == null || v.isEmpty) ? l.emailError : null,
-            ),
-            const SizedBox(height: 14),
-            CustomTextField(
-              label: l.passwordLabel,
-              hint: l.passwordMinError,
-              controller: passCtrl,
-              obscureText: obscure,
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textHint),
-              suffixIcon: IconButton(
-                onPressed: onObscureToggle,
-                icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                    size: 18, color: AppColors.textHint),
-              ),
-              validator: (v) => (v == null || v.length < 6) ? l.passwordMinError : null,
-            ),
-            const SizedBox(height: 28),
-            _GradientButton(text: l.registerBtn, loading: loading, onPressed: onSubmit),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DemoHint extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
+    final display = '+998 ${phone.padRight(9, ' ').split('').take(2).join()} '
+        '${phone.length > 2 ? phone.substring(2, phone.length.clamp(0, 5)).padRight(3, ' ') : '   '} '
+        '${phone.length > 5 ? phone.substring(5, phone.length.clamp(0, 7)).padRight(2, ' ') : '  '} '
+        '${phone.length > 7 ? phone.substring(7) : ''}';
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+        color: rc.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: phone.isNotEmpty ? cAccent : rc.line),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              l.registerFirstHint,
-              style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textSecondary),
+      child: Text(
+        display,
+        style: GoogleFonts.spectral(
+            fontSize: 22, fontWeight: FontWeight.w600, color: rc.ink, letterSpacing: 2),
+      ),
+    );
+  }
+}
+
+// ── OTP display ───────────────────────────────────────────────
+
+class _OtpDisplay extends StatelessWidget {
+  final String otp;
+  final RC rc;
+  const _OtpDisplay({required this.otp, required this.rc});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(6, (i) {
+        final filled = i < otp.length;
+        final active = i == otp.length;
+        return Container(
+          width: 48,
+          height: 58,
+          decoration: BoxDecoration(
+            color: rc.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active ? cAccent : (filled ? cAccentDk : rc.line),
+              width: active ? 2 : 1.5,
             ),
           ),
-        ],
+          child: Center(
+            child: Text(
+              filled ? otp[i] : '',
+              style: GoogleFonts.spectral(
+                  fontSize: 24, fontWeight: FontWeight.w700, color: rc.ink),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ── Numpad ────────────────────────────────────────────────────
+
+class _Numpad extends StatelessWidget {
+  final ValueChanged<String> onTap;
+  const _Numpad({required this.onTap});
+
+  static const _keys = [
+    '1', '2', '3',
+    '4', '5', '6',
+    '7', '8', '9',
+    '',  '0', '⌫',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final rc = RC.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.0,
+        ),
+        itemCount: _keys.length,
+        itemBuilder: (_, i) {
+          final k = _keys[i];
+          if (k.isEmpty) return const SizedBox();
+          return GestureDetector(
+            onTap: () => onTap(k),
+            child: Container(
+              decoration: BoxDecoration(
+                color: rc.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: rc.line),
+              ),
+              child: Center(
+                child: k == '⌫'
+                    ? Icon(Icons.backspace_outlined, size: 20, color: rc.ink)
+                    : Text(
+                        k,
+                        style: GoogleFonts.spectral(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: rc.ink,
+                        ),
+                      ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

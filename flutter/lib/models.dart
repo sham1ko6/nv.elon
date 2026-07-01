@@ -1,173 +1,293 @@
-// ============================================================
-// models.dart  –  Data models for nv.elon
-// ============================================================
-import 'package:intl/intl.dart';
-
 class AppCategory {
   final String id;
   final String name;
-  final String uzName;
-  final String icon;
-  final List<AppSubcategory> subcategories;
-
+  final String emoji;
+  final String imageUrl;
   const AppCategory({
     required this.id,
     required this.name,
-    required this.uzName,
-    required this.icon,
-    this.subcategories = const [],
+    required this.emoji,
+    required this.imageUrl,
   });
 }
 
-class AppSubcategory {
-  final String id;
-  final String name;
-  final String uzName;
+const kCategories = [
+  AppCategory(id: 'texnika',     name: 'Texnika',     emoji: '🚜', imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=120'),
+  AppCategory(id: 'uy-joy',      name: 'Uy-joy',      emoji: '🏠', imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=120'),
+  AppCategory(id: 'chorva',      name: 'Chorva',      emoji: '🐄', imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=120'),
+  AppCategory(id: 'avto',        name: 'Avto',        emoji: '🚗', imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=120'),
+  AppCategory(id: 'don',         name: 'Don',         emoji: '🌾', imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=120'),
+  AppCategory(id: 'elektronika', name: 'Elektronika', emoji: '📱', imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=120'),
+];
 
-  const AppSubcategory({
-    required this.id,
-    required this.name,
-    required this.uzName,
-  });
-}
+// ── Listing model ─────────────────────────────────────────────
 
 class Listing {
   final String id;
   final String title;
-  final String description;
   final double price;
   final String currency;
-  final String categoryId;
-  final String subcategoryId;
   final String location;
-  final String phone;
-  final String date;
-  final String colorTag;
-  final int views;
-  final String sellerName;
-  final bool isCompany;
-  final bool isTop;
   final String imageUrl;
-  final String status; // 'active' | 'pending' | 'expired'
-  bool isFavorite;
+  final String category;
+  final String description;
+  final String sellerName;
+  final String phone;
+  final int views;
+  final String date;
+  final bool isTop;
+  final String condition;
+  final bool isCompany;
+  final double sellerRating;
 
-  Listing({
+  const Listing({
     required this.id,
     required this.title,
-    required this.description,
     required this.price,
-    this.currency = 'USD',
-    required this.categoryId,
-    this.subcategoryId = '',
+    required this.currency,
     required this.location,
-    required this.phone,
-    required this.date,
-    required this.colorTag,
-    this.views = 0,
+    required this.imageUrl,
+    required this.category,
+    required this.description,
     required this.sellerName,
-    this.isCompany = false,
-    this.isTop = false,
-    this.imageUrl = '',
-    this.status = 'active',
-    this.isFavorite = false,
-  });
-
-  factory Listing.fromJson(Map<String, dynamic> json) {
-    final rawPrice = json['price'];
-    final price = rawPrice is num
-        ? rawPrice.toDouble()
-        : double.tryParse(rawPrice?.toString() ?? '0') ?? 0;
-
-    return Listing(
-      id: json['id'].toString(),
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      price: price,
-      currency: json['currency'] ?? 'USD',
-      categoryId: json['category'] ?? '',
-      subcategoryId: json['subcategory'] ?? '',
-      location: json['location'] ?? '',
-      phone: json['contact_phone'] ?? '',
-      date: _parseDate(json['created_at']?.toString()),
-      colorTag: json['category'] ?? '',
-      views: json['views'] is int ? json['views'] : 0,
-      sellerName: json['seller_name'] ?? '',
-      isCompany: json['is_company'] == true,
-      isTop: json['is_top'] == true,
-      imageUrl: json['image_url'] ?? '',
-      status: json['status'] ?? 'active',
-    );
-  }
-
-  // Parse ISO timestamp → Uzbek-friendly display string.
-  static String _parseDate(String? raw) {
-    if (raw == null || raw.isEmpty) return 'Yangi';
-    final dt = DateTime.tryParse(raw)?.toLocal();
-    if (dt == null) return 'Yangi';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(dt.year, dt.month, dt.day);
-    final hm = DateFormat('HH:mm').format(dt);
-    if (day == today) return 'Bugun, $hm';
-    if (day == today.subtract(const Duration(days: 1))) return 'Kecha, $hm';
-    const months = [
-      'Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyu',
-      'Iyu', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek',
-    ];
-    return '${dt.day}-${months[dt.month - 1]}';
-  }
-
-  Listing copyWith({bool? isFavorite, String? status}) {
-    return Listing(
-      id: id,
-      title: title,
-      description: description,
-      price: price,
-      currency: currency,
-      categoryId: categoryId,
-      subcategoryId: subcategoryId,
-      location: location,
-      phone: phone,
-      date: date,
-      colorTag: colorTag,
-      views: views,
-      sellerName: sellerName,
-      isCompany: isCompany,
-      isTop: isTop,
-      imageUrl: imageUrl,
-      status: status ?? this.status,
-      isFavorite: isFavorite ?? this.isFavorite,
-    );
-  }
-
-  // Full price string used everywhere in the UI.
-  String get formattedPrice => Listing.formatPrice(price, currency);
-
-  static String formatPrice(double amount, String currency) {
-    if (currency == 'UZS') {
-      // Russian locale gives space-thousands: 125 000
-      final fmt = NumberFormat('#,##0', 'ru');
-      return "${fmt.format(amount.toInt())} so'm";
-    }
-    // Default: USD with comma-thousands
-    return NumberFormat.currency(
-      symbol: '\$',
-      locale: 'en_US',
-      decimalDigits: 0,
-    ).format(amount);
-  }
-}
-
-class AppUser {
-  final String name;
-  final String phone;
-  final String role;
-  final String initials;
-
-  const AppUser({
-    required this.name,
     required this.phone,
-    required this.role,
-    required this.initials,
+    this.views = 0,
+    required this.date,
+    this.isTop = false,
+    this.condition = 'used',
+    this.isCompany = false,
+    this.sellerRating = 4.8,
   });
+
+  factory Listing.fromJson(Map<String, dynamic> j) => Listing(
+        id: '${j['id']}',
+        title: j['title'] ?? '',
+        price: (j['price'] ?? 0).toDouble(),
+        currency: j['currency'] ?? 'USD',
+        location: j['location'] ?? '',
+        imageUrl: j['image_url'] ?? j['imageUrl'] ?? '',
+        category: j['category_name'] ?? j['category'] ?? '',
+        description: j['description'] ?? '',
+        sellerName: j['seller_name'] ?? j['user_name'] ?? '',
+        phone: j['phone'] ?? '',
+        views: (j['views'] ?? 0) as int,
+        date: j['created_at'] ?? j['date'] ?? '',
+        isTop: j['is_top'] == true || j['is_top'] == 1,
+        condition: j['condition'] ?? 'used',
+        isCompany: j['is_company'] == true || j['is_company'] == 1,
+        sellerRating: (j['seller_rating'] ?? 4.8).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'price': price,
+        'currency': currency,
+        'location': location,
+        'image_url': imageUrl,
+        'category': category,
+        'description': description,
+        'seller_name': sellerName,
+        'phone': phone,
+        'views': views,
+        'date': date,
+        'is_top': isTop,
+        'condition': condition,
+        'is_company': isCompany,
+        'seller_rating': sellerRating,
+      };
+
+  String get formattedPrice {
+    final n = price.toInt();
+    final s = n.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return currency == 'USD' ? '\$$s' : '$s so\'m';
+  }
 }
+
+// ── Mock listings ─────────────────────────────────────────────
+
+const kMockListings = [
+  Listing(
+    id: 'm1',
+    title: 'John Deere 5075E traktor — 2021 yil, yaxshi holat',
+    price: 28500,
+    currency: 'USD',
+    location: 'Andijon viloyati',
+    imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400',
+    category: 'Texnika',
+    description: "John Deere 5075E traktor, 2021 yil ishlab chiqarilgan. 75 ot kuchi, yaxshi texnik holatda. GPS navigatsiya, konditsioner. Ko'p yillik tajriba bilan sotilmoqda.",
+    sellerName: 'Mansur Xolmatov',
+    phone: '+998901234567',
+    views: 1248,
+    date: '2 soat oldin',
+    isTop: true,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.9,
+  ),
+  Listing(
+    id: 'm2',
+    title: "3 xonali kvartira — Chilonzor tumani, 9/14 qavat",
+    price: 68000,
+    currency: 'USD',
+    location: 'Toshkent shahar',
+    imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400',
+    category: 'Uy-joy',
+    description: "Chilonzor tumanida 3 xonali kvartira. 9/14 qavat, lift mavjud. Umumiy maydoni 78 kv.m. Yangi ta'mirlangan, barcha mebel va texnika bilan birga.",
+    sellerName: 'Gulnora Toshmatova',
+    phone: '+998901234568',
+    views: 3456,
+    date: '5 soat oldin',
+    isTop: false,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.7,
+  ),
+  Listing(
+    id: 'm3',
+    title: 'Sigir, 12 bosh — Yaxshi nasldor mollar',
+    price: 55000000,
+    currency: 'UZS',
+    location: 'Namangan viloyati',
+    imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=400',
+    category: 'Chorva',
+    description: "12 bosh nasldor sigir sotiladi. Har biri kuniga 18-22 litr sut beradi. Sog'liq guvohnomasi mavjud. Fermada ko'rish mumkin.",
+    sellerName: 'Bobur Fermerchilik',
+    phone: '+998901234569',
+    views: 892,
+    date: '1 kun oldin',
+    isTop: true,
+    condition: 'used',
+    isCompany: true,
+    sellerRating: 4.6,
+  ),
+  Listing(
+    id: 'm4',
+    title: 'Toyota Camry 2.5 — 2022 yil, 42 000 km',
+    price: 34000,
+    currency: 'USD',
+    location: 'Toshkent shahar',
+    imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400',
+    category: 'Avto',
+    description: "Toyota Camry 2.5L, 2022 yil, 42 000 km yurgan. Oq rang, barcha opsiyalar bor. Texnik ko'rik o'tgan. Bepul sinov haydovi.",
+    sellerName: 'Sardor Umarov',
+    phone: '+998901234570',
+    views: 5123,
+    date: '2 kun oldin',
+    isTop: false,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.8,
+  ),
+  Listing(
+    id: 'm5',
+    title: "Bug'doy — 1 tonna, A sinf, quruq",
+    price: 1800000,
+    currency: 'UZS',
+    location: 'Samarqand viloyati',
+    imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400',
+    category: 'Don',
+    description: "Yillik hosil. A sinf bug'doy, namligi 13%, klekovina 28%. Omborda 120 tonna mavjud. Minimal buyurtma 1 tonna. O'z transportimiz bor.",
+    sellerName: 'Agro Samarqand MChJ',
+    phone: '+998901234571',
+    views: 234,
+    date: '3 kun oldin',
+    isTop: false,
+    condition: 'new',
+    isCompany: true,
+    sellerRating: 4.5,
+  ),
+  Listing(
+    id: 'm6',
+    title: 'iPhone 15 Pro Max 256GB — Natural Titanium',
+    price: 1450,
+    currency: 'USD',
+    location: 'Toshkent shahar',
+    imageUrl: 'https://images.unsplash.com/photo-1696426106210-b91d5d2e8f62?w=400',
+    category: 'Elektronika',
+    description: "iPhone 15 Pro Max 256GB, Natural Titanium. Yangi holda, original quti bilan. AppleCare+ garantiya 1 yil. Barcha acessuarlar mavjud.",
+    sellerName: 'TechStore Tashkent',
+    phone: '+998901234572',
+    views: 7890,
+    date: '3 soat oldin',
+    isTop: true,
+    condition: 'new',
+    isCompany: true,
+    sellerRating: 4.9,
+  ),
+  Listing(
+    id: 'm7',
+    title: 'MacBook Pro 14" M3 Pro — 18GB/512GB',
+    price: 2800,
+    currency: 'USD',
+    location: 'Toshkent shahar',
+    imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400',
+    category: 'Elektronika',
+    description: "MacBook Pro 14\", M3 Pro chip, 18GB unified memory, 512GB SSD. Space Black. Yangi, original. 1 yil kafolat. Faqat jiddiy xaridorlarga.",
+    sellerName: 'Dilshod Nazarov',
+    phone: '+998901234573',
+    views: 2341,
+    date: '6 soat oldin',
+    isTop: false,
+    condition: 'new',
+    isCompany: false,
+    sellerRating: 4.7,
+  ),
+  Listing(
+    id: 'm8',
+    title: "Hovli uy — 8 sotix, 4 xonali, garaj",
+    price: 95000,
+    currency: 'USD',
+    location: "Farg'ona shahar",
+    imageUrl: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400',
+    category: 'Uy-joy',
+    description: "8 sotix hovli, 4 xonali 2 qavatli uy. Garaj, qozon xona, mevali daraxtlar. Gaz, suv, kanalizatsiya. Hujjatlar tayyor, tez bitim.",
+    sellerName: 'Zulfiya Mirzayeva',
+    phone: '+998901234574',
+    views: 1567,
+    date: '4 kun oldin',
+    isTop: false,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.6,
+  ),
+  Listing(
+    id: 'm9',
+    title: 'MTZ-82 Belarus traktor — 2020 yil',
+    price: 14500,
+    currency: 'USD',
+    location: 'Qashqadaryo viloyati',
+    imageUrl: 'https://images.unsplash.com/photo-1592878897400-e30cbded994e?w=400',
+    category: 'Texnika',
+    description: "MTZ-82 Belarus traktor, 2020 yil. 80 ot kuchi, yaxshi holatda. Ko'tarmasi va disklisi bor. Yil davomida faqat 450 soat ishlagan.",
+    sellerName: 'Hamid Yusupov',
+    phone: '+998901234575',
+    views: 678,
+    date: '1 hafta oldin',
+    isTop: false,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.4,
+  ),
+  Listing(
+    id: 'm10',
+    title: 'Chevrolet Nexia 3 — 2023 yil, 12 000 km',
+    price: 13500,
+    currency: 'USD',
+    location: 'Samarqand shahar',
+    imageUrl: 'https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?w=400',
+    category: 'Avto',
+    description: "Chevrolet Nexia 3, 2023 yil. Oq rang, 12 000 km. Klimat kontrol, elektr oynalar. Avtoijarada bo'lmagan, yakka egasi.",
+    sellerName: 'Akmal Tursunov',
+    phone: '+998901234576',
+    views: 3245,
+    date: '2 kun oldin',
+    isTop: false,
+    condition: 'used',
+    isCompany: false,
+    sellerRating: 4.8,
+  ),
+];
