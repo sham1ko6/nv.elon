@@ -1,4 +1,4 @@
-import { supabase } from '../config/db';
+import supabase from '../config/db';
 
 export async function runExpiryJob(): Promise<void> {
   const now = new Date().toISOString();
@@ -21,7 +21,7 @@ export async function runExpiryJob(): Promise<void> {
       .from('listings')
       .update({ status: 'expired' })
       .eq('status', 'active')
-      .in('subscription_id', expiredSubs.map((s) => (s as { id: number }).id))
+      .in('subscription_id', expiredSubs.map((s: { id: number }) => s.id))
       .select('id');
     if (slError) throw slError;
     expiredSubListingsCount = subListings?.length ?? 0;
