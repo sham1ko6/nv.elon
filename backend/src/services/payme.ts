@@ -1,4 +1,4 @@
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { activateOrder } from './orders';
 import { AdOrder, PaymentTransaction } from '../types';
 
@@ -41,19 +41,25 @@ async function getOrderForAccount(account: PaymeAccount): Promise<AdOrder> {
   if (!orderId) {
     throw new PaymeError(-31050, "Buyurtma raqami noto'g'ri");
   }
-  const [order] = await query<AdOrder>('SELECT * FROM ad_orders WHERE id = ?', [orderId]);
-  if (!order) {
-    throw new PaymeError(-31050, 'Buyurtma topilmadi');
-  }
-  return order;
+  const { data, error } = await supabase
+    .from('ad_orders')
+    .select('*')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new PaymeError(-31050, 'Buyurtma topilmadi');
+  return data as AdOrder;
 }
 
 async function findTransaction(providerTxnId: string): Promise<PaymentTransaction | null> {
-  const [txn] = await query<PaymentTransaction>(
-    "SELECT * FROM payment_transactions WHERE provider = 'payme' AND provider_txn_id = ?",
-    [providerTxnId]
-  );
-  return txn ?? null;
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .select('*')
+    .eq('provider', 'payme')
+    .eq('provider_txn_id', providerTxnId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PaymentTransaction | null;
 }
 
 export async function checkPerformTransaction(params: CheckPerformParams) {
@@ -95,16 +101,25 @@ export async function createTransaction(params: CreateTransactionParams) {
     throw new PaymeError(-31001, "Noto'g'ri summa");
   }
 
-  const result = await execute(
-    `INSERT INTO payment_transactions (ad_order_id, provider, provider_txn_id, state, amount, raw_payload)
-     VALUES (?, 'payme', ?, '1', ?, ?)`,
-    [order.id, params.id, Number(order.amount), JSON.stringify(params)]
-  );
-  await execute("UPDATE ad_orders SET status = 'pending' WHERE id = ?", [order.id]);
+  const { data: txnData, error: txnError } = await supabase
+    .from('payment_transactions')
+    .insert({
+      ad_order_id: order.id,
+      provider: 'payme',
+      provider_txn_id: params.id,
+      state: '1',
+      amount: Number(order.amount),
+      raw_payload: params,
+    })
+    .select('id')
+    .single();
+  if (txnError) throw new PaymeError(-32603, 'Internal error');
+
+  await supabase.from('ad_orders').update({ status: 'pending' }).eq('id', order.id);
 
   return {
     create_time: Number(params.time),
-    transaction: String(result.insertId),
+    transaction: String((txnData as { id: number }).id),
     state: 1,
   };
 }
@@ -116,20 +131,32 @@ export async function performTransaction(params: TransactionIdParams) {
   }
 
   if (txn.state === '2') {
-    return { transaction: String(txn.id), perform_time: new Date(txn.updated_at).getTime(), state: 2 };
+    return {
+      transaction: String(txn.id),
+      perform_time: new Date(txn.updated_at).getTime(),
+      state: 2,
+    };
   }
   if (txn.state !== '1') {
     throw new PaymeError(-31008, "Tranzaksiyani bajarib bo'lmaydi");
   }
 
-  await execute("UPDATE payment_transactions SET state = '2' WHERE id = ?", [txn.id]);
+  await supabase
+    .from('payment_transactions')
+    .update({ state: '2' })
+    .eq('id', txn.id);
+
   await activateOrder(txn.ad_order_id);
 
-  const [updated] = await query<PaymentTransaction>('SELECT * FROM payment_transactions WHERE id = ?', [txn.id]);
+  const { data: updated } = await supabase
+    .from('payment_transactions')
+    .select('updated_at')
+    .eq('id', txn.id)
+    .single();
 
   return {
     transaction: String(txn.id),
-    perform_time: updated ? new Date(updated.updated_at).getTime() : Date.now(),
+    perform_time: updated ? new Date((updated as { updated_at: string }).updated_at).getTime() : Date.now(),
     state: 2,
   };
 }
@@ -141,18 +168,31 @@ export async function cancelTransaction(params: CancelTransactionParams) {
   }
 
   if (txn.state === '-1' || txn.state === '-2') {
-    return { transaction: String(txn.id), cancel_time: new Date(txn.updated_at).getTime(), state: Number(txn.state) };
+    return {
+      transaction: String(txn.id),
+      cancel_time: new Date(txn.updated_at).getTime(),
+      state: Number(txn.state),
+    };
   }
 
   const newState = txn.state === '2' ? '-2' : '-1';
-  await execute('UPDATE payment_transactions SET state = ? WHERE id = ?', [newState, txn.id]);
-  await execute("UPDATE ad_orders SET status = 'cancelled' WHERE id = ?", [txn.ad_order_id]);
 
-  const [updated] = await query<PaymentTransaction>('SELECT * FROM payment_transactions WHERE id = ?', [txn.id]);
+  await supabase
+    .from('payment_transactions')
+    .update({ state: newState })
+    .eq('id', txn.id);
+
+  await supabase.from('ad_orders').update({ status: 'cancelled' }).eq('id', txn.ad_order_id);
+
+  const { data: updated } = await supabase
+    .from('payment_transactions')
+    .select('updated_at')
+    .eq('id', txn.id)
+    .single();
 
   return {
     transaction: String(txn.id),
-    cancel_time: updated ? new Date(updated.updated_at).getTime() : Date.now(),
+    cancel_time: updated ? new Date((updated as { updated_at: string }).updated_at).getTime() : Date.now(),
     state: Number(newState),
   };
 }

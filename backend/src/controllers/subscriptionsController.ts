@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import { Plan, PaymentProvider } from '../types';
 
@@ -15,31 +15,50 @@ export async function createSubscription(req: Request, res: Response, next: Next
       throw new AppError(400, "provider 'payme' yoki 'click' bo'lishi kerak");
     }
 
-    const [plan] = await query<Plan>('SELECT * FROM plans WHERE id = ? AND is_active = TRUE', [plan_id]);
-    if (!plan) {
-      throw new AppError(404, 'Reja topilmadi');
-    }
+    const { data: planData, error: planError } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('id', plan_id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (planError) throw planError;
+    if (!planData) throw new AppError(404, 'Reja topilmadi');
 
-    const subResult = await execute(
-      "INSERT INTO subscriptions (user_id, plan_id, status) VALUES (?, ?, 'pending')",
-      [userId, plan_id]
-    );
+    const plan = planData as Plan;
 
-    const orderResult = await execute(
-      `INSERT INTO ad_orders (user_id, type, plan_id, amount, currency, status)
-       VALUES (?, 'subscription', ?, ?, ?, 'created')`,
-      [userId, plan_id, plan.price, plan.currency]
-    );
+    const { data: subData, error: subError } = await supabase
+      .from('subscriptions')
+      .insert({ user_id: userId, plan_id, status: 'pending' })
+      .select('id')
+      .single();
+    if (subError) throw subError;
 
-    await execute(
-      `INSERT INTO payment_transactions (ad_order_id, provider, state, amount) VALUES (?, ?, 'created', ?)`,
-      [orderResult.insertId, provider, plan.price]
-    );
+    const { data: orderData, error: orderError } = await supabase
+      .from('ad_orders')
+      .insert({
+        user_id: userId,
+        type: 'subscription',
+        plan_id,
+        amount: plan.price,
+        currency: plan.currency,
+        status: 'created',
+      })
+      .select('id')
+      .single();
+    if (orderError) throw orderError;
+
+    const { error: txnError } = await supabase.from('payment_transactions').insert({
+      ad_order_id: (orderData as { id: number }).id,
+      provider,
+      state: 'created',
+      amount: plan.price,
+    });
+    if (txnError) throw txnError;
 
     res.status(201).json({
-      order_id: orderResult.insertId,
-      subscription_id: subResult.insertId,
-      checkout_url: `https://checkout.stub/${provider}/${orderResult.insertId}`,
+      order_id: (orderData as { id: number }).id,
+      subscription_id: (subData as { id: number }).id,
+      checkout_url: `https://checkout.stub/${provider}/${(orderData as { id: number }).id}`,
     });
   } catch (err) {
     next(err);
@@ -50,32 +69,39 @@ export async function getMySubscription(req: Request, res: Response, next: NextF
   try {
     const userId = req.user!.id;
 
-    const [subscription] = await query<{
-      id: number;
-      status: string;
-      started_at: Date | null;
-      expires_at: Date | null;
-      created_at: Date;
-      plan_id: number;
-      plan_code: string;
-      plan_name: string;
-      plan_price: number;
-      plan_currency: string;
-      duration_days: number;
-      max_active_ads: number;
-    }>(
-      `SELECT s.id, s.status, s.started_at, s.expires_at, s.created_at,
-              p.id AS plan_id, p.code AS plan_code, p.name_uz AS plan_name, p.price AS plan_price,
-              p.currency AS plan_currency, p.duration_days, p.max_active_ads
-       FROM subscriptions s
-       JOIN plans p ON p.id = s.plan_id
-       WHERE s.user_id = ? AND s.status = 'active'
-       ORDER BY s.expires_at DESC
-       LIMIT 1`,
-      [userId]
-    );
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*, plans!plan_id(id, code, name_uz, price, currency, duration_days, max_active_ads)')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('expires_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
 
-    res.status(200).json({ subscription: subscription ?? null });
+    if (!data) {
+      return res.status(200).json({ subscription: null });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = data as any;
+    const p = row.plans ?? {};
+    const subscription = {
+      id: row.id,
+      status: row.status,
+      started_at: row.started_at,
+      expires_at: row.expires_at,
+      created_at: row.created_at,
+      plan_id: row.plan_id,
+      plan_code: p.code,
+      plan_name: p.name_uz,
+      plan_price: p.price,
+      plan_currency: p.currency,
+      duration_days: p.duration_days,
+      max_active_ads: p.max_active_ads,
+    };
+
+    res.status(200).json({ subscription });
   } catch (err) {
     next(err);
   }

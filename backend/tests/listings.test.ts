@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../src/app';
-import { pool, execute } from '../src/config/db';
+import { supabase } from '../src/config/db';
 import { randomPhone, getAnyCategoryId } from './testUtils';
 
 async function registerAndLogin(name: string) {
@@ -10,9 +10,6 @@ async function registerAndLogin(name: string) {
 }
 
 describe('Listings', () => {
-  afterAll(async () => {
-    await pool.end();
-  });
 
   it('GET /api/listings returns 200 with array', async () => {
     const res = await request(app).get('/api/listings');
@@ -26,14 +23,22 @@ describe('Listings', () => {
 
     // Insert directly as 'active' so it's visible in the public feed without
     // going through the payment flow.
-    await execute(
-      `INSERT INTO listings
-        (user_id, category_id, title, description, price, currency, location, contact_phone,
-         status, source, published_at, expires_at)
-       VALUES (?, ?, 'John Deere traktori sotiladi', 'Ishlatilgan traktor, yaxshi holatda', 15000, 'USD',
-         'Samarqand', ?, 'active', 'posting_fee', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))`,
-      [seller.userId, categoryId, seller.phone]
-    );
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    await supabase.from('listings').insert({
+      user_id: seller.userId,
+      category_id: categoryId,
+      title: 'John Deere traktori sotiladi',
+      description: 'Ishlatilgan traktor, yaxshi holatda',
+      price: 15000,
+      currency: 'USD',
+      location: 'Samarqand',
+      contact_phone: seller.phone,
+      status: 'active',
+      source: 'posting_fee',
+      published_at: new Date().toISOString(),
+      expires_at: expiresAt.toISOString(),
+    });
 
     const res = await request(app).get('/api/listings').query({ q: 'traktor' });
 

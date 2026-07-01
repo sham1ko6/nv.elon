@@ -2,7 +2,7 @@ import { randomInt } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import { sendOTP } from '../services/sms';
 import { User, SafeUser, AuthTokenPayload, RefreshTokenPayload } from '../types';
@@ -46,13 +46,23 @@ function issueTokens(user: Pick<User, 'id' | 'phone' | 'role'>) {
 }
 
 async function findUserByPhone(phone: string): Promise<User | null> {
-  const rows = await query<User>('SELECT * FROM users WHERE phone = ? LIMIT 1', [phone]);
-  return rows[0] ?? null;
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('phone', phone)
+    .maybeSingle();
+  if (error) throw error;
+  return data as User | null;
 }
 
 async function findUserById(id: number): Promise<User | null> {
-  const rows = await query<User>('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
-  return rows[0] ?? null;
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as User | null;
 }
 
 export async function register(req: Request, res: Response, next: NextFunction) {
@@ -60,7 +70,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const { name, phone, password } = req.body as { name?: string; phone?: string; password?: string };
 
     if (!name || !phone) {
-      throw new AppError(400, "Ism va telefon raqami talab qilinadi");
+      throw new AppError(400, 'Ism va telefon raqami talab qilinadi');
     }
     if (!PHONE_REGEX.test(phone)) {
       throw new AppError(400, "Telefon raqami formati noto'g'ri (+998XXXXXXXXX)");
@@ -68,21 +78,19 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
     const existing = await findUserByPhone(phone);
     if (existing) {
-      throw new AppError(409, 'Bu telefon raqami allaqachon ro\'yxatdan o\'tgan');
+      throw new AppError(409, "Bu telefon raqami allaqachon ro'yxatdan o'tgan");
     }
 
     const passwordHash = password ? await bcrypt.hash(password, BCRYPT_ROUNDS) : null;
 
-    const result = await execute(
-      'INSERT INTO users (name, phone, password_hash, role) VALUES (?, ?, ?, ?)',
-      [name, phone, passwordHash, 'buyer']
-    );
+    const { data, error } = await supabase
+      .from('users')
+      .insert({ name, phone, password_hash: passwordHash, role: 'buyer' })
+      .select()
+      .single();
+    if (error) throw error;
 
-    const user = await findUserById(result.insertId);
-    if (!user) {
-      throw new AppError(500, 'Foydalanuvchi yaratilmadi');
-    }
-
+    const user = data as User;
     res.status(201).json({ user: toSafeUser(user), ...issueTokens(user) });
   } catch (err) {
     next(err);
@@ -99,12 +107,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const user = await findUserByPhone(phone);
     if (!user || !user.password_hash) {
-      throw new AppError(401, "Telefon raqami yoki parol xato");
+      throw new AppError(401, 'Telefon raqami yoki parol xato');
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
-      throw new AppError(401, "Telefon raqami yoki parol xato");
+      throw new AppError(401, 'Telefon raqami yoki parol xato');
     }
 
     if (user.status === 'banned') {
@@ -155,11 +163,13 @@ export async function verifyOtp(req: Request, res: Response, next: NextFunction)
 
     let user = await findUserByPhone(phone);
     if (!user) {
-      const result = await execute(
-        'INSERT INTO users (name, phone, password_hash, role, is_verified) VALUES (?, ?, ?, ?, ?)',
-        ['Foydalanuvchi', phone, null, 'buyer', true]
-      );
-      user = await findUserById(result.insertId);
+      const { data, error } = await supabase
+        .from('users')
+        .insert({ name: 'Foydalanuvchi', phone, password_hash: null, role: 'buyer', is_verified: true })
+        .select()
+        .single();
+      if (error) throw new AppError(500, 'Foydalanuvchi yaratilmadi');
+      user = data as User;
     }
     if (!user) {
       throw new AppError(500, 'Foydalanuvchi yaratilmadi');

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../src/app';
-import { pool, query } from '../src/config/db';
+import { supabase } from '../src/config/db';
 import { randomPhone, getAnyCategoryId } from './testUtils';
 
 async function registerAndLogin(name: string) {
@@ -14,10 +14,6 @@ function paymeAuthHeader(key: string): string {
 }
 
 describe('Payments', () => {
-  afterAll(async () => {
-    await pool.end();
-  });
-
   it('POST /api/payments/payme CheckPerformTransaction returns correct JSON-RPC response', async () => {
     const seller = await registerAndLogin('Payme Seller');
     const categoryId = await getAnyCategoryId();
@@ -38,7 +34,12 @@ describe('Payments', () => {
     const orderId = createRes.body.order_id;
     expect(orderId).toBeDefined();
 
-    const [order] = await query<{ amount: number }>('SELECT amount FROM ad_orders WHERE id = ?', [orderId]);
+    const { data: orderData } = await supabase
+      .from('ad_orders')
+      .select('amount')
+      .eq('id', orderId)
+      .single();
+    const order = orderData as { amount: number };
 
     const res = await request(app)
       .post('/api/payments/payme')

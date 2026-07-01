@@ -1,45 +1,79 @@
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AdOrder, Plan, Subscription } from '../types';
 
 // Activates whatever the paid ad_order is for: a posting-fee listing goes
 // 'active' with a fixed expiry; a subscription order activates the most
-// recent pending subscription for that user+plan (ad_orders has no FK back
-// to subscriptions, so this pairing is done by lookup instead of a join).
+// recent pending subscription for that user+plan.
 export async function activateOrder(orderId: number): Promise<void> {
-  const [order] = await query<AdOrder>('SELECT * FROM ad_orders WHERE id = ?', [orderId]);
-  if (!order || order.status === 'paid') {
-    return;
-  }
+  const { data: orderData, error: orderError } = await supabase
+    .from('ad_orders')
+    .select('*')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (orderError) throw orderError;
 
-  await execute("UPDATE ad_orders SET status = 'paid', paid_at = NOW() WHERE id = ?", [orderId]);
+  const order = orderData as AdOrder | null;
+  if (!order || order.status === 'paid') return;
+
+  await supabase
+    .from('ad_orders')
+    .update({ status: 'paid', paid_at: new Date().toISOString() })
+    .eq('id', orderId);
 
   if (order.type === 'posting_fee' && order.listing_id) {
-    const settingRows = await query<{ value: string }>(
-      "SELECT value FROM app_settings WHERE `key` = 'ad_duration_days'"
-    );
-    const days = Number(settingRows[0]?.value ?? 30);
+    const { data: settingData } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'ad_duration_days')
+      .maybeSingle();
+    const days = Number((settingData as { value?: string } | null)?.value ?? 30);
 
-    await execute(
-      `UPDATE listings SET status = 'active', published_at = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL ? DAY)
-       WHERE id = ?`,
-      [days, order.listing_id]
-    );
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + days);
+
+    await supabase
+      .from('listings')
+      .update({
+        status: 'active',
+        published_at: new Date().toISOString(),
+        expires_at: expiresAt.toISOString(),
+      })
+      .eq('id', order.listing_id);
   }
 
   if (order.type === 'subscription' && order.plan_id) {
-    const [plan] = await query<Plan>('SELECT * FROM plans WHERE id = ?', [order.plan_id]);
+    const { data: planData } = await supabase
+      .from('plans')
+      .select('*')
+      .eq('id', order.plan_id)
+      .maybeSingle();
+
+    const plan = planData as Plan | null;
     if (plan) {
-      const [subscription] = await query<Subscription>(
-        `SELECT * FROM subscriptions WHERE user_id = ? AND plan_id = ? AND status = 'pending'
-         ORDER BY created_at DESC LIMIT 1`,
-        [order.user_id, order.plan_id]
-      );
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', order.user_id)
+        .eq('plan_id', order.plan_id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const subscription = subData as Subscription | null;
       if (subscription) {
-        await execute(
-          `UPDATE subscriptions SET status = 'active', started_at = NOW(),
-            expires_at = DATE_ADD(NOW(), INTERVAL ? DAY) WHERE id = ?`,
-          [plan.duration_days, subscription.id]
-        );
+        const now = new Date();
+        const expiresAt = new Date(now);
+        expiresAt.setDate(expiresAt.getDate() + plan.duration_days);
+
+        await supabase
+          .from('subscriptions')
+          .update({
+            status: 'active',
+            started_at: now.toISOString(),
+            expires_at: expiresAt.toISOString(),
+          })
+          .eq('id', subscription.id);
       }
     }
   }

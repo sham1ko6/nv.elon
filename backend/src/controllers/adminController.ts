@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import { Listing, User, AdOrder, ListingStatus, UserRole, UserStatus } from '../types';
 
@@ -10,39 +10,39 @@ export async function getAllListings(req: Request, res: Response, next: NextFunc
     const limit = Math.max(1, Number(req.query.limit) || 20);
     const offset = (page - 1) * limit;
 
-    const conditions: string[] = [];
-    const params: unknown[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dbQuery: any = supabase
+      .from('listings')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    if (status) {
-      conditions.push('status = ?');
-      params.push(status);
-    }
-    if (category) {
-      conditions.push('category_id = ?');
-      params.push(category);
-    }
-    if (q) {
-      conditions.push('(title LIKE ? OR description LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`);
-    }
+    if (status) dbQuery = dbQuery.eq('status', status);
+    if (category) dbQuery = dbQuery.eq('category_id', category);
+    if (q) dbQuery = dbQuery.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { data, error, count } = await dbQuery;
+    if (error) throw error;
 
-    const countRows = await query<{ total: number }>(`SELECT COUNT(*) AS total FROM listings ${whereClause}`, params);
-    const total = countRows[0]?.total ?? 0;
-
-    const data = await query<Listing>(
-      `SELECT * FROM listings ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-
-    res.status(200).json({ data, total, page, totalPages: Math.max(1, Math.ceil(total / limit)) });
+    res.status(200).json({
+      data: data as Listing[],
+      total: count ?? 0,
+      page,
+      totalPages: Math.max(1, Math.ceil((count ?? 0) / limit)),
+    });
   } catch (err) {
     next(err);
   }
 }
 
-const ALLOWED_LISTING_STATUSES: ListingStatus[] = ['draft', 'pending_payment', 'active', 'expired', 'rejected', 'sold'];
+const ALLOWED_LISTING_STATUSES: ListingStatus[] = [
+  'draft',
+  'pending_payment',
+  'active',
+  'expired',
+  'rejected',
+  'sold',
+];
 
 export async function updateListingStatus(req: Request, res: Response, next: NextFunction) {
   try {
@@ -53,17 +53,30 @@ export async function updateListingStatus(req: Request, res: Response, next: Nex
       throw new AppError(400, "status noto'g'ri");
     }
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new AppError(404, "E'lon topilmadi");
 
-    const publishedAt = status === 'active' && !listing.published_at ? new Date() : listing.published_at;
+    const listing = existing as Listing;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const publishedAt =
+      status === 'active' && !(listing as any).published_at
+        ? new Date().toISOString()
+        : (listing as any).published_at;
 
-    await execute('UPDATE listings SET status = ?, published_at = ? WHERE id = ?', [status, publishedAt, id]);
+    const { data, error } = await supabase
+      .from('listings')
+      .update({ status, published_at: publishedAt })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
 
-    const [updated] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    res.status(200).json({ listing: updated });
+    res.status(200).json({ listing: data as Listing });
   } catch (err) {
     next(err);
   }
@@ -72,31 +85,21 @@ export async function updateListingStatus(req: Request, res: Response, next: Nex
 export async function getAllUsers(req: Request, res: Response, next: NextFunction) {
   try {
     const { role, status, q } = req.query as Record<string, string | undefined>;
-    const conditions: string[] = [];
-    const params: unknown[] = [];
 
-    if (role) {
-      conditions.push('role = ?');
-      params.push(role);
-    }
-    if (status) {
-      conditions.push('status = ?');
-      params.push(status);
-    }
-    if (q) {
-      conditions.push('(name LIKE ? OR phone LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`);
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dbQuery: any = supabase
+      .from('users')
+      .select('id, name, phone, email, role, is_verified, status, created_at, updated_at')
+      .order('created_at', { ascending: false });
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    if (role) dbQuery = dbQuery.eq('role', role);
+    if (status) dbQuery = dbQuery.eq('status', status);
+    if (q) dbQuery = dbQuery.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
 
-    const data = await query<Omit<User, 'password_hash'>>(
-      `SELECT id, name, phone, email, role, is_verified, status, created_at, updated_at
-       FROM users ${whereClause} ORDER BY created_at DESC`,
-      params
-    );
+    const { data, error } = await dbQuery;
+    if (error) throw error;
 
-    res.status(200).json({ data });
+    res.status(200).json({ data: data as Omit<User, 'password_hash'>[] });
   } catch (err) {
     next(err);
   }
@@ -110,21 +113,27 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     const { id } = req.params;
     const { role, status } = req.body as { role?: UserRole; status?: UserStatus };
 
-    const [user] = await query<User>('SELECT * FROM users WHERE id = ?', [id]);
-    if (!user) {
-      throw new AppError(404, 'Foydalanuvchi topilmadi');
-    }
-    if (role && !ALLOWED_ROLES.includes(role)) {
-      throw new AppError(400, "role noto'g'ri");
-    }
-    if (status && !ALLOWED_STATUSES.includes(status)) {
-      throw new AppError(400, "status noto'g'ri");
-    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new AppError(404, 'Foydalanuvchi topilmadi');
 
-    await execute('UPDATE users SET role = ?, status = ? WHERE id = ?', [role ?? user.role, status ?? user.status, id]);
+    const user = existing as User;
+    if (role && !ALLOWED_ROLES.includes(role)) throw new AppError(400, "role noto'g'ri");
+    if (status && !ALLOWED_STATUSES.includes(status)) throw new AppError(400, "status noto'g'ri");
+
+    await supabase
+      .from('users')
+      .update({ role: role ?? user.role, status: status ?? user.status })
+      .eq('id', id);
 
     const { password_hash: _unused, ...safeUser } = user;
-    res.status(200).json({ user: { ...safeUser, role: role ?? user.role, status: status ?? user.status } });
+    res.status(200).json({
+      user: { ...safeUser, role: role ?? user.role, status: status ?? user.status },
+    });
   } catch (err) {
     next(err);
   }
@@ -132,13 +141,29 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
 
 export async function getAllOrders(_req: Request, res: Response, next: NextFunction) {
   try {
-    const data = await query<AdOrder & { payment_state: string | null; provider: string | null }>(
-      `SELECT ao.*,
-        (SELECT pt.state FROM payment_transactions pt WHERE pt.ad_order_id = ao.id ORDER BY pt.created_at DESC LIMIT 1) AS payment_state,
-        (SELECT pt.provider FROM payment_transactions pt WHERE pt.ad_order_id = ao.id ORDER BY pt.created_at DESC LIMIT 1) AS provider
-       FROM ad_orders ao
-       ORDER BY ao.created_at DESC`
-    );
+    const { data: orders, error } = await supabase
+      .from('ad_orders')
+      .select('*, payment_transactions(state, provider, created_at)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const data = ((orders ?? []) as Array<Record<string, unknown>>).map((order) => {
+      const txns = (order.payment_transactions as Array<{
+        state: string;
+        provider: string;
+        created_at: string;
+      }>) ?? [];
+      const latest = txns.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0];
+      const { payment_transactions: _omit, ...rest } = order;
+      return {
+        ...rest,
+        payment_state: latest?.state ?? null,
+        provider: latest?.provider ?? null,
+      };
+    });
+
     res.status(200).json({ data });
   } catch (err) {
     next(err);
@@ -147,20 +172,34 @@ export async function getAllOrders(_req: Request, res: Response, next: NextFunct
 
 export async function getMetrics(_req: Request, res: Response, next: NextFunction) {
   try {
-    const [usersRows, listingsRows, revenueRows, todayRows] = await Promise.all([
-      query<{ total: number }>('SELECT COUNT(*) AS total FROM users'),
-      query<{ total: number }>("SELECT COUNT(*) AS total FROM listings WHERE status = 'active'"),
-      query<{ total: number }>("SELECT COALESCE(SUM(amount), 0) AS total FROM ad_orders WHERE status = 'paid'"),
-      query<{ total: number }>(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM ad_orders WHERE status = 'paid' AND DATE(paid_at) = CURDATE()"
-      ),
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    const [usersRes, listingsRes, revenueRes, todayRes] = await Promise.all([
+      supabase.from('users').select('*', { count: 'exact', head: true }),
+      supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('ad_orders').select('amount').eq('status', 'paid'),
+      supabase
+        .from('ad_orders')
+        .select('amount')
+        .eq('status', 'paid')
+        .gte('paid_at', todayStart.toISOString()),
     ]);
 
+    const totalRevenue = ((revenueRes.data ?? []) as Array<{ amount: number }>).reduce(
+      (sum, row) => sum + Number(row.amount),
+      0
+    );
+    const todayRevenue = ((todayRes.data ?? []) as Array<{ amount: number }>).reduce(
+      (sum, row) => sum + Number(row.amount),
+      0
+    );
+
     res.status(200).json({
-      totalUsers: usersRows[0]?.total ?? 0,
-      activeListings: listingsRows[0]?.total ?? 0,
-      totalRevenue: revenueRows[0]?.total ?? 0,
-      todayRevenue: todayRows[0]?.total ?? 0,
+      totalUsers: usersRes.count ?? 0,
+      activeListings: listingsRes.count ?? 0,
+      totalRevenue,
+      todayRevenue,
     });
   } catch (err) {
     next(err);

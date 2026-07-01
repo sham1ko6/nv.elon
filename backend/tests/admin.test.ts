@@ -1,15 +1,11 @@
 import request from 'supertest';
 import app from '../src/app';
-import { pool } from '../src/config/db';
 import { randomPhone } from './testUtils';
 
 const ADMIN_PHONE = '+998901234567';
 const ADMIN_PASSWORD = 'admin123';
 
 describe('Admin', () => {
-  afterAll(async () => {
-    await pool.end();
-  });
 
   it('GET /api/admin/metrics without token returns 401', async () => {
     const res = await request(app).get('/api/admin/metrics');

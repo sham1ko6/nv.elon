@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { activateOrder } from './orders';
 import { AdOrder, PaymentTransaction } from '../types';
 
@@ -31,7 +31,15 @@ export function verifySign(body: ClickRequestBody): boolean {
           body.action,
           body.sign_time,
         ]
-      : [body.click_trans_id, body.service_id, SECRET_KEY, body.merchant_trans_id, body.amount, body.action, body.sign_time];
+      : [
+          body.click_trans_id,
+          body.service_id,
+          SECRET_KEY,
+          body.merchant_trans_id,
+          body.amount,
+          body.action,
+          body.sign_time,
+        ];
 
   const expected = crypto.createHash('md5').update(parts.join('')).digest('hex');
   return Boolean(body.sign_string) && expected === body.sign_string;
@@ -39,10 +47,15 @@ export function verifySign(body: ClickRequestBody): boolean {
 
 export async function prepare(body: ClickRequestBody) {
   const orderId = Number(body.merchant_trans_id);
-  const [order] = await query<AdOrder>('SELECT * FROM ad_orders WHERE id = ?', [orderId]);
-  if (!order) {
-    return { error: -5, error_note: 'Buyurtma topilmadi' };
-  }
+
+  const { data: orderData } = await supabase
+    .from('ad_orders')
+    .select('*')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  const order = orderData as AdOrder | null;
+  if (!order) return { error: -5, error_note: 'Buyurtma topilmadi' };
   if (order.status !== 'created') {
     return { error: -4, error_note: "Buyurtma allaqachon to'langan yoki bekor qilingan" };
   }
@@ -52,17 +65,26 @@ export async function prepare(body: ClickRequestBody) {
     return { error: -2, error_note: "Summa noto'g'ri" };
   }
 
-  const result = await execute(
-    `INSERT INTO payment_transactions (ad_order_id, provider, provider_txn_id, state, amount, raw_payload)
-     VALUES (?, 'click', ?, 'prepared', ?, ?)`,
-    [order.id, String(body.click_trans_id), Number(order.amount), JSON.stringify(body)]
-  );
-  await execute("UPDATE ad_orders SET status = 'pending' WHERE id = ?", [order.id]);
+  const { data: txnData, error: txnError } = await supabase
+    .from('payment_transactions')
+    .insert({
+      ad_order_id: order.id,
+      provider: 'click',
+      provider_txn_id: String(body.click_trans_id),
+      state: 'prepared',
+      amount: Number(order.amount),
+      raw_payload: body,
+    })
+    .select('id')
+    .single();
+  if (txnError) return { error: -9, error_note: 'Internal error' };
+
+  await supabase.from('ad_orders').update({ status: 'pending' }).eq('id', order.id);
 
   return {
     click_trans_id: body.click_trans_id,
     merchant_trans_id: body.merchant_trans_id,
-    merchant_prepare_id: result.insertId,
+    merchant_prepare_id: (txnData as { id: number }).id,
     error: 0,
     error_note: 'Success',
   };
@@ -70,25 +92,33 @@ export async function prepare(body: ClickRequestBody) {
 
 export async function complete(body: ClickRequestBody) {
   const orderId = Number(body.merchant_trans_id);
-  const [order] = await query<AdOrder>('SELECT * FROM ad_orders WHERE id = ?', [orderId]);
-  if (!order) {
-    return { error: -5, error_note: 'Buyurtma topilmadi' };
-  }
 
-  const [txn] = await query<PaymentTransaction>(
-    "SELECT * FROM payment_transactions WHERE id = ? AND provider = 'click'",
-    [Number(body.merchant_prepare_id)]
-  );
-  if (!txn) {
-    return { error: -6, error_note: 'Tranzaksiya topilmadi' };
-  }
-  if (txn.state === 'cancelled') {
-    return { error: -9, error_note: 'Tranzaksiya bekor qilingan' };
-  }
+  const { data: orderData } = await supabase
+    .from('ad_orders')
+    .select('*')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  const order = orderData as AdOrder | null;
+  if (!order) return { error: -5, error_note: 'Buyurtma topilmadi' };
+
+  const { data: txnData } = await supabase
+    .from('payment_transactions')
+    .select('*')
+    .eq('id', Number(body.merchant_prepare_id))
+    .eq('provider', 'click')
+    .maybeSingle();
+
+  const txn = txnData as PaymentTransaction | null;
+  if (!txn) return { error: -6, error_note: 'Tranzaksiya topilmadi' };
+  if (txn.state === 'cancelled') return { error: -9, error_note: 'Tranzaksiya bekor qilingan' };
 
   if (Number(body.error) < 0) {
-    await execute("UPDATE payment_transactions SET state = 'cancelled' WHERE id = ?", [txn.id]);
-    await execute("UPDATE ad_orders SET status = 'cancelled' WHERE id = ?", [order.id]);
+    await supabase
+      .from('payment_transactions')
+      .update({ state: 'cancelled' })
+      .eq('id', txn.id);
+    await supabase.from('ad_orders').update({ status: 'cancelled' }).eq('id', order.id);
     return {
       click_trans_id: body.click_trans_id,
       merchant_trans_id: body.merchant_trans_id,
@@ -108,7 +138,11 @@ export async function complete(body: ClickRequestBody) {
     };
   }
 
-  await execute("UPDATE payment_transactions SET state = 'confirmed' WHERE id = ?", [txn.id]);
+  await supabase
+    .from('payment_transactions')
+    .update({ state: 'confirmed' })
+    .eq('id', txn.id);
+
   await activateOrder(order.id);
 
   return {

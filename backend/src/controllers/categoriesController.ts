@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import { Category, Subcategory, CategoryWithSubcategories } from '../types';
 
@@ -11,8 +11,16 @@ export function invalidateCategoriesCache(): void {
 }
 
 async function loadCategoriesWithSubcategories(): Promise<CategoryWithSubcategories[]> {
-  const categories = await query<Category>('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
-  const subcategories = await query<Subcategory>('SELECT * FROM subcategories ORDER BY id ASC');
+  const [catRes, subRes] = await Promise.all([
+    supabase.from('categories').select('*').order('sort_order').order('id'),
+    supabase.from('subcategories').select('*').order('id'),
+  ]);
+
+  if (catRes.error) throw catRes.error;
+  if (subRes.error) throw subRes.error;
+
+  const categories = (catRes.data ?? []) as Category[];
+  const subcategories = (subRes.data ?? []) as Subcategory[];
 
   return categories.map((category) => ({
     ...category,
@@ -42,14 +50,15 @@ export async function createCategory(req: Request, res: Response, next: NextFunc
       throw new AppError(400, 'slug, name_uz, name_en talab qilinadi');
     }
 
-    const result = await execute(
-      'INSERT INTO categories (slug, name_uz, name_en, icon, sort_order) VALUES (?, ?, ?, ?, ?)',
-      [slug, name_uz, name_en, icon ?? null, sort_order ?? 0]
-    );
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({ slug, name_uz, name_en, icon: icon ?? null, sort_order: sort_order ?? 0 })
+      .select()
+      .single();
+    if (error) throw error;
 
     invalidateCategoriesCache();
-    const [category] = await query<Category>('SELECT * FROM categories WHERE id = ?', [result.insertId]);
-    res.status(201).json({ category });
+    res.status(201).json({ category: data as Category });
   } catch (err) {
     next(err);
   }
@@ -60,26 +69,32 @@ export async function updateCategory(req: Request, res: Response, next: NextFunc
     const { id } = req.params;
     const { slug, name_uz, name_en, icon, sort_order } = req.body as Partial<Category>;
 
-    const [existing] = await query<Category>('SELECT * FROM categories WHERE id = ?', [id]);
-    if (!existing) {
-      throw new AppError(404, 'Kategoriya topilmadi');
-    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new AppError(404, 'Kategoriya topilmadi');
 
-    await execute(
-      'UPDATE categories SET slug = ?, name_uz = ?, name_en = ?, icon = ?, sort_order = ? WHERE id = ?',
-      [
-        slug ?? existing.slug,
-        name_uz ?? existing.name_uz,
-        name_en ?? existing.name_en,
-        icon ?? existing.icon,
-        sort_order ?? existing.sort_order,
-        id,
-      ]
-    );
+    const cat = existing as Category;
+
+    const { data, error } = await supabase
+      .from('categories')
+      .update({
+        slug: slug ?? cat.slug,
+        name_uz: name_uz ?? cat.name_uz,
+        name_en: name_en ?? cat.name_en,
+        icon: icon ?? cat.icon,
+        sort_order: sort_order ?? cat.sort_order,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
 
     invalidateCategoriesCache();
-    const [updated] = await query<Category>('SELECT * FROM categories WHERE id = ?', [id]);
-    res.status(200).json({ category: updated });
+    res.status(200).json({ category: data as Category });
   } catch (err) {
     next(err);
   }
@@ -88,10 +103,14 @@ export async function updateCategory(req: Request, res: Response, next: NextFunc
 export async function deleteCategory(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const result = await execute('DELETE FROM categories WHERE id = ?', [id]);
-    if (result.affectedRows === 0) {
-      throw new AppError(404, 'Kategoriya topilmadi');
-    }
+
+    const { data, error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id)
+      .select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new AppError(404, 'Kategoriya topilmadi');
 
     invalidateCategoriesCache();
     res.status(200).json({ message: "Kategoriya o'chirildi" });

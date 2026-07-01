@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import * as payme from '../services/payme';
 import * as click from '../services/click';
@@ -29,18 +29,26 @@ export async function initPayment(req: Request, res: Response, next: NextFunctio
       throw new AppError(400, "provider 'payme' yoki 'click' bo'lishi kerak");
     }
 
-    const [order] = await query<AdOrder>('SELECT * FROM ad_orders WHERE id = ?', [order_id]);
-    if (!order) {
-      throw new AppError(404, 'Buyurtma topilmadi');
-    }
+    const { data: orderData, error: fetchError } = await supabase
+      .from('ad_orders')
+      .select('*')
+      .eq('id', order_id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!orderData) throw new AppError(404, 'Buyurtma topilmadi');
+
+    const order = orderData as AdOrder;
     if (order.user_id !== req.user!.id) {
       throw new AppError(403, 'Bu buyurtma sizga tegishli emas');
     }
 
-    await execute(
-      `INSERT INTO payment_transactions (ad_order_id, provider, state, amount) VALUES (?, ?, 'created', ?)`,
-      [order.id, provider, order.amount]
-    );
+    const { error } = await supabase.from('payment_transactions').insert({
+      ad_order_id: order.id,
+      provider,
+      state: 'created',
+      amount: Number(order.amount),
+    });
+    if (error) throw error;
 
     res.status(200).json({ checkout_url: `https://checkout.stub/${provider}/${order.id}` });
   } catch (err) {
@@ -112,8 +120,15 @@ export async function handleClick(req: Request, res: Response) {
 export async function getMyOrders(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const data = await query<AdOrder>('SELECT * FROM ad_orders WHERE user_id = ? ORDER BY created_at DESC', [userId]);
-    res.status(200).json({ data });
+
+    const { data, error } = await supabase
+      .from('ad_orders')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    res.status(200).json({ data: data as AdOrder[] });
   } catch (err) {
     next(err);
   }

@@ -1,12 +1,8 @@
 import request from 'supertest';
 import app from '../src/app';
-import { pool } from '../src/config/db';
 import { randomPhone } from './testUtils';
 
 describe('Auth', () => {
-  afterAll(async () => {
-    await pool.end();
-  });
 
   it('POST /api/auth/register returns 201 with tokens', async () => {
     const phone = randomPhone();

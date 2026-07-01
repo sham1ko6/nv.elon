@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { Request, Response, NextFunction } from 'express';
-import { query, execute } from '../config/db';
+import supabase from '../config/db';
 import { AppError } from '../middleware/errorHandler';
 import { Listing, ListingImage, ContactEventType, Subscription } from '../types';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
-
 const DEFAULT_LIMIT = 20;
 
 interface AppSettingsMap {
@@ -16,9 +15,11 @@ interface AppSettingsMap {
 }
 
 async function loadAppSettings(): Promise<AppSettingsMap> {
-  const rows = await query<{ key: string; value: string }>('SELECT `key`, `value` FROM app_settings');
+  const { data, error } = await supabase.from('app_settings').select('key, value');
+  if (error) throw error;
+
   const map: Record<string, string> = {};
-  rows.forEach((row) => {
+  ((data ?? []) as Array<{ key: string; value: string }>).forEach((row) => {
     map[row.key] = row.value;
   });
   return {
@@ -35,66 +36,63 @@ function maskPhone(phone: string): string {
 
 export async function listListings(req: Request, res: Response, next: NextFunction) {
   try {
-    const { q, category, subcategory, location, min, max, sort } = req.query as Record<string, string | undefined>;
+    const { q, category, subcategory, location, min, max, sort } = req.query as Record<
+      string,
+      string | undefined
+    >;
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Number(req.query.limit) || DEFAULT_LIMIT);
     const offset = (page - 1) * limit;
 
-    const joins: string[] = [
-      'JOIN categories c ON c.id = l.category_id',
-      'LEFT JOIN subcategories sc ON sc.id = l.subcategory_id',
-    ];
-    const conditions: string[] = ["l.status = 'active'", 'l.expires_at > NOW()'];
-    const params: unknown[] = [];
+    // Resolve category/subcategory slugs to IDs (avoids join filter complexity)
+    let categoryId: number | null = null;
+    let subcategoryId: number | null = null;
 
-    if (q) {
-      conditions.push('MATCH(l.title, l.description) AGAINST (? IN NATURAL LANGUAGE MODE)');
-      params.push(q);
-    }
     if (category) {
-      conditions.push('c.slug = ?');
-      params.push(category);
+      const { data: cat } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', category)
+        .maybeSingle();
+      categoryId = (cat as { id: number } | null)?.id ?? null;
     }
     if (subcategory) {
-      conditions.push('sc.slug = ?');
-      params.push(subcategory);
-    }
-    if (location) {
-      conditions.push('l.location LIKE ?');
-      params.push(`%${location}%`);
-    }
-    if (min) {
-      conditions.push('l.price >= ?');
-      params.push(Number(min));
-    }
-    if (max) {
-      conditions.push('l.price <= ?');
-      params.push(Number(max));
+      const { data: subcat } = await supabase
+        .from('subcategories')
+        .select('id')
+        .eq('slug', subcategory)
+        .maybeSingle();
+      subcategoryId = (subcat as { id: number } | null)?.id ?? null;
     }
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const joinClause = joins.join(' ');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dbQuery: any = supabase
+      .from('listings')
+      .select('*', { count: 'exact' })
+      .eq('status', 'active')
+      .gt('expires_at', new Date().toISOString());
 
-    let orderClause = 'ORDER BY l.created_at DESC';
-    if (sort === 'price_asc') orderClause = 'ORDER BY l.price ASC';
-    else if (sort === 'price_desc') orderClause = 'ORDER BY l.price DESC';
+    if (q) dbQuery = dbQuery.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
+    if (categoryId !== null) dbQuery = dbQuery.eq('category_id', categoryId);
+    if (subcategoryId !== null) dbQuery = dbQuery.eq('subcategory_id', subcategoryId);
+    if (location) dbQuery = dbQuery.ilike('location', `%${location}%`);
+    if (min) dbQuery = dbQuery.gte('price', Number(min));
+    if (max) dbQuery = dbQuery.lte('price', Number(max));
 
-    const countRows = await query<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM listings l ${joinClause} ${whereClause}`,
-      params
-    );
-    const total = countRows[0]?.total ?? 0;
+    if (sort === 'price_asc') dbQuery = dbQuery.order('price', { ascending: true });
+    else if (sort === 'price_desc') dbQuery = dbQuery.order('price', { ascending: false });
+    else dbQuery = dbQuery.order('created_at', { ascending: false });
 
-    const data = await query<Listing>(
-      `SELECT l.* FROM listings l ${joinClause} ${whereClause} ${orderClause} LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+    dbQuery = dbQuery.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await dbQuery;
+    if (error) throw error;
 
     res.status(200).json({
-      data,
-      total,
+      data: data ?? [],
+      total: count ?? 0,
       page,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
+      totalPages: Math.max(1, Math.ceil((count ?? 0) / limit)),
     });
   } catch (err) {
     next(err);
@@ -105,26 +103,37 @@ export async function getListing(req: Request, res: Response, next: NextFunction
   try {
     const { id } = req.params;
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: listingData, error } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!listingData) throw new AppError(404, "E'lon topilmadi");
 
-    await execute('UPDATE listings SET views = views + 1 WHERE id = ?', [id]);
+    const listing = listingData as Listing;
 
-    const images = await query<ListingImage>(
-      'SELECT * FROM listing_images WHERE listing_id = ? ORDER BY sort_order ASC, id ASC',
-      [id]
-    );
+    // Atomic view increment via DB function
+    await supabase.rpc('increment_listing_views', { p_id: Number(id) });
 
-    const [seller] = await query<{ name: string; phone: string }>(
-      'SELECT name, phone FROM users WHERE id = ?',
-      [listing.user_id]
-    );
+    const { data: imagesData } = await supabase
+      .from('listing_images')
+      .select('*')
+      .eq('listing_id', id)
+      .order('sort_order')
+      .order('id');
+
+    const { data: sellerData } = await supabase
+      .from('users')
+      .select('name, phone')
+      .eq('id', listing.user_id)
+      .maybeSingle();
+
+    const seller = sellerData as { name: string; phone: string } | null;
 
     res.status(200).json({
       listing: { ...listing, views: listing.views + 1 },
-      images,
+      images: (imagesData ?? []) as ListingImage[],
       seller: seller ? { name: seller.name, phone: maskPhone(seller.phone) } : null,
     });
   } catch (err) {
@@ -156,67 +165,96 @@ export async function createListing(req: Request, res: Response, next: NextFunct
 
     const settings = await loadAppSettings();
 
-    const [activeSub] = await query<Subscription & { max_active_ads: number }>(
-      `SELECT s.*, p.max_active_ads FROM subscriptions s
-       JOIN plans p ON p.id = s.plan_id
-       WHERE s.user_id = ? AND s.status = 'active' AND s.expires_at > NOW()
-       LIMIT 1`,
-      [userId]
-    );
+    // Check for an active subscription with remaining ad slots
+    const { data: subData } = await supabase
+      .from('subscriptions')
+      .select('*, plans!plan_id(max_active_ads)')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .gt('expires_at', new Date().toISOString())
+      .order('expires_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    let activeAdsCount = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activeSub = subData as any;
+
+    let hasSubscriptionSlot = false;
     if (activeSub) {
-      const [{ count }] = await query<{ count: number }>(
-        "SELECT COUNT(*) AS count FROM listings WHERE subscription_id = ? AND status = 'active'",
-        [activeSub.id]
-      );
-      activeAdsCount = count;
+      const { count } = await supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .eq('subscription_id', activeSub.id)
+        .eq('status', 'active');
+      const activeAdsCount = count ?? 0;
+      hasSubscriptionSlot = activeAdsCount < (activeSub.plans?.max_active_ads ?? 0);
     }
 
-    const hasSubscriptionSlot = !!activeSub && activeAdsCount < activeSub.max_active_ads;
-
     if (hasSubscriptionSlot && activeSub) {
-      const result = await execute(
-        `INSERT INTO listings
-          (user_id, category_id, subcategory_id, title, description, price, currency, location,
-           contact_phone, status, source, subscription_id, published_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 'subscription', ?, NOW(), ?)`,
-        [
-          userId,
+      const { data: listingData, error } = await supabase
+        .from('listings')
+        .insert({
+          user_id: userId,
           category_id,
-          subcategory_id ?? null,
+          subcategory_id: subcategory_id ?? null,
           title,
           description,
           price,
-          currency ?? 'USD',
+          currency: currency ?? 'USD',
           location,
           contact_phone,
-          activeSub.id,
-          activeSub.expires_at,
-        ]
-      );
-
-      const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [result.insertId]);
-      return res.status(201).json({ listing });
+          status: 'active',
+          source: 'subscription',
+          subscription_id: activeSub.id,
+          published_at: new Date().toISOString(),
+          expires_at: activeSub.expires_at,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(201).json({ listing: listingData as Listing });
     }
 
-    const result = await execute(
-      `INSERT INTO listings
-        (user_id, category_id, subcategory_id, title, description, price, currency, location,
-         contact_phone, status, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', 'posting_fee')`,
-      [userId, category_id, subcategory_id ?? null, title, description, price, currency ?? 'USD', location, contact_phone]
-    );
+    // No subscription slot → requires posting fee payment
+    const { data: listingData, error: listingError } = await supabase
+      .from('listings')
+      .insert({
+        user_id: userId,
+        category_id,
+        subcategory_id: subcategory_id ?? null,
+        title,
+        description,
+        price,
+        currency: currency ?? 'USD',
+        location,
+        contact_phone,
+        status: 'pending_payment',
+        source: 'posting_fee',
+      })
+      .select()
+      .single();
+    if (listingError) throw listingError;
 
-    const listingId = result.insertId;
-    const orderResult = await execute(
-      `INSERT INTO ad_orders (user_id, type, listing_id, amount, currency, status)
-       VALUES (?, 'posting_fee', ?, ?, ?, 'created')`,
-      [userId, listingId, settings.posting_fee_amount, settings.posting_fee_currency]
-    );
+    const listingId = (listingData as Listing).id;
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [listingId]);
-    res.status(201).json({ listing, order_id: orderResult.insertId });
+    const { data: orderData, error: orderError } = await supabase
+      .from('ad_orders')
+      .insert({
+        user_id: userId,
+        type: 'posting_fee',
+        listing_id: listingId,
+        amount: settings.posting_fee_amount,
+        currency: settings.posting_fee_currency,
+        status: 'created',
+      })
+      .select('id')
+      .single();
+    if (orderError) throw orderError;
+
+    res.status(201).json({
+      listing: listingData as Listing,
+      order_id: (orderData as { id: number }).id,
+    });
   } catch (err) {
     next(err);
   }
@@ -232,10 +270,15 @@ export async function updateListing(req: Request, res: Response, next: NextFunct
       location?: string;
     };
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new AppError(404, "E'lon topilmadi");
+
+    const listing = existing as Listing;
     if (listing.user_id !== req.user!.id) {
       throw new AppError(403, "Faqat egasi e'lonni tahrirlashi mumkin");
     }
@@ -243,19 +286,20 @@ export async function updateListing(req: Request, res: Response, next: NextFunct
       throw new AppError(400, "Narx 0 dan katta bo'lishi kerak");
     }
 
-    await execute(
-      'UPDATE listings SET title = ?, description = ?, price = ?, location = ? WHERE id = ?',
-      [
-        title ?? listing.title,
-        description ?? listing.description,
-        price ?? listing.price,
-        location ?? listing.location,
-        id,
-      ]
-    );
+    const { data, error } = await supabase
+      .from('listings')
+      .update({
+        title: title ?? listing.title,
+        description: description ?? listing.description,
+        price: price ?? listing.price,
+        location: location ?? listing.location,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
 
-    const [updated] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    res.status(200).json({ listing: updated });
+    res.status(200).json({ listing: data as Listing });
   } catch (err) {
     next(err);
   }
@@ -265,29 +309,38 @@ export async function deleteListing(req: Request, res: Response, next: NextFunct
   try {
     const { id } = req.params;
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new AppError(404, "E'lon topilmadi");
+
+    const listing = existing as Listing;
     if (listing.user_id !== req.user!.id && req.user!.role !== 'admin') {
       throw new AppError(403, "Faqat egasi yoki admin e'lonni o'chirishi mumkin");
     }
 
-    // ad_orders.listing_id has no ON DELETE CASCADE, so any draft/unpaid order
-    // tied to this listing must be cleaned up here or the delete would fail
-    // with a foreign key violation.
-    const orders = await query<{ id: number }>('SELECT id FROM ad_orders WHERE listing_id = ?', [id]);
-    for (const order of orders) {
-      await execute('DELETE FROM payment_transactions WHERE ad_order_id = ?', [order.id]);
-    }
-    if (orders.length) {
-      await execute('DELETE FROM ad_orders WHERE listing_id = ?', [id]);
+    // Clean up related ad_orders and payment_transactions (no ON DELETE CASCADE there)
+    const { data: orders } = await supabase
+      .from('ad_orders')
+      .select('id')
+      .eq('listing_id', id);
+
+    const orderIds = ((orders ?? []) as Array<{ id: number }>).map((o) => o.id);
+    if (orderIds.length > 0) {
+      await supabase.from('payment_transactions').delete().in('ad_order_id', orderIds);
+      await supabase.from('ad_orders').delete().eq('listing_id', id);
     }
 
-    await execute('DELETE FROM listings WHERE id = ?', [id]);
+    const { error } = await supabase.from('listings').delete().eq('id', id);
+    if (error) throw error;
+
     res.status(200).json({ message: "E'lon o'chirildi" });
-  } catch (err) {
-    if (err instanceof Error && 'code' in err && (err as { code?: string }).code === 'ER_ROW_IS_REFERENCED_2') {
+  } catch (err: unknown) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((err as any)?.code === '23503') {
       return next(new AppError(409, "Bu e'lon buyurtmaga bog'langan, avval buyurtmani tozalang"));
     }
     next(err);
@@ -297,15 +350,31 @@ export async function deleteListing(req: Request, res: Response, next: NextFunct
 export async function getMyListings(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const data = await query<Listing & { order_status: string | null; order_id: number | null }>(
-      `SELECT l.*,
-        (SELECT ao.status FROM ad_orders ao WHERE ao.listing_id = l.id ORDER BY ao.created_at DESC LIMIT 1) AS order_status,
-        (SELECT ao.id FROM ad_orders ao WHERE ao.listing_id = l.id ORDER BY ao.created_at DESC LIMIT 1) AS order_id
-       FROM listings l
-       WHERE l.user_id = ?
-       ORDER BY l.created_at DESC`,
-      [userId]
-    );
+
+    const { data: listings, error } = await supabase
+      .from('listings')
+      .select('*, ad_orders(id, status, created_at)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const data = ((listings ?? []) as Array<Record<string, unknown>>).map((listing) => {
+      const orders = (listing.ad_orders as Array<{
+        id: number;
+        status: string;
+        created_at: string;
+      }>) ?? [];
+      const latestOrder = orders.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0];
+      const { ad_orders: _omit, ...rest } = listing;
+      return {
+        ...rest,
+        order_status: latestOrder?.status ?? null,
+        order_id: latestOrder?.id ?? null,
+      };
+    });
+
     res.status(200).json({ data });
   } catch (err) {
     next(err);
@@ -318,15 +387,22 @@ export async function contactListing(req: Request, res: Response, next: NextFunc
     const { type } = req.body as { type?: ContactEventType };
     const eventType: ContactEventType = type === 'call' || type === 'share' ? type : 'view_phone';
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: listingData, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!listingData) throw new AppError(404, "E'lon topilmadi");
 
-    await execute(
-      'INSERT INTO contact_events (listing_id, viewer_id, type) VALUES (?, ?, ?)',
-      [id, req.user?.id ?? null, eventType]
-    );
+    const listing = listingData as Listing;
+
+    const { error } = await supabase.from('contact_events').insert({
+      listing_id: Number(id),
+      viewer_id: req.user?.id ?? null,
+      type: eventType,
+    });
+    if (error) throw error;
 
     res.status(200).json({ phone: listing.contact_phone });
   } catch (err) {
@@ -339,10 +415,15 @@ export async function uploadImages(req: Request, res: Response, next: NextFuncti
     const { id } = req.params;
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: listingData, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!listingData) throw new AppError(404, "E'lon topilmadi");
+
+    const listing = listingData as Listing;
     if (listing.user_id !== req.user!.id) {
       throw new AppError(403, "Faqat egasi rasm qo'shishi mumkin");
     }
@@ -353,7 +434,10 @@ export async function uploadImages(req: Request, res: Response, next: NextFuncti
     const urls: string[] = [];
     for (const file of files) {
       const url = `/uploads/${file.filename}`;
-      await execute('INSERT INTO listing_images (listing_id, url) VALUES (?, ?)', [id, url]);
+      const { error } = await supabase
+        .from('listing_images')
+        .insert({ listing_id: Number(id), url });
+      if (error) throw error;
       urls.push(url);
     }
 
@@ -367,28 +451,37 @@ export async function deleteImage(req: Request, res: Response, next: NextFunctio
   try {
     const { id, imageId } = req.params;
 
-    const [listing] = await query<Listing>('SELECT * FROM listings WHERE id = ?', [id]);
-    if (!listing) {
-      throw new AppError(404, "E'lon topilmadi");
-    }
+    const { data: listingData, error: fetchError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!listingData) throw new AppError(404, "E'lon topilmadi");
+
+    const listing = listingData as Listing;
     if (listing.user_id !== req.user!.id) {
       throw new AppError(403, "Faqat egasi rasmni o'chirishi mumkin");
     }
 
-    const [image] = await query<ListingImage>('SELECT * FROM listing_images WHERE id = ? AND listing_id = ?', [
-      imageId,
-      id,
-    ]);
-    if (!image) {
-      throw new AppError(404, 'Rasm topilmadi');
-    }
+    const { data: imageData, error: imgFetchError } = await supabase
+      .from('listing_images')
+      .select('*')
+      .eq('id', imageId)
+      .eq('listing_id', id)
+      .maybeSingle();
+    if (imgFetchError) throw imgFetchError;
+    if (!imageData) throw new AppError(404, 'Rasm topilmadi');
+
+    const image = imageData as ListingImage;
 
     const filePath = path.join(UPLOAD_DIR, path.basename(image.url));
     fs.unlink(filePath, () => {
-      // best-effort disk cleanup; ignore errors (e.g. file already gone)
+      // best-effort disk cleanup; ignore errors
     });
 
-    await execute('DELETE FROM listing_images WHERE id = ?', [imageId]);
+    const { error } = await supabase.from('listing_images').delete().eq('id', imageId);
+    if (error) throw error;
 
     res.status(200).json({ message: "Rasm o'chirildi" });
   } catch (err) {

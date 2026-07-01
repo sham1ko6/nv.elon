@@ -1,4 +1,4 @@
-import { query } from '../src/config/db';
+import { supabase } from '../src/config/db';
 
 export function randomPhone(): string {
   const subscriber = Math.floor(900000000 + Math.random() * 99999999);
@@ -6,9 +6,9 @@ export function randomPhone(): string {
 }
 
 export async function getAnyCategoryId(): Promise<number> {
-  const [category] = await query<{ id: number }>('SELECT id FROM categories LIMIT 1');
-  if (!category) {
-    throw new Error('No seeded categories found — run db:seed against the test database first');
+  const { data, error } = await supabase.from('categories').select('id').limit(1).single();
+  if (error || !data) {
+    throw new Error('No seeded categories found — run seed.sql against the Supabase database first');
   }
-  return category.id;
+  return (data as { id: number }).id;
 }
