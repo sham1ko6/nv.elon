@@ -1,4 +1,4 @@
-export const API_ROOT = 'https://nvelon-production.up.railway.app';
+export const API_ROOT = 'https://elon-backend-jh1a.onrender.com';
 const API_BASE = `${API_ROOT}/api`;
 
 let authToken: string | null = localStorage.getItem('authToken');
