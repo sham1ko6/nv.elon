@@ -56,9 +56,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
           children: [
             // Header
             Container(
-              color: rc.card,
               padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: rc.line))),
+              decoration: BoxDecoration(color: rc.card, border: Border(bottom: BorderSide(color: rc.line))),
               child: Row(
                 children: [
                   RRoundIconButton(icon: Icons.arrow_back_ios_new_rounded, size: 32, onTap: () => Navigator.of(context).pop()),
@@ -103,9 +102,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
             ),
             // Input
             Container(
-              color: rc.card,
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              decoration: BoxDecoration(border: Border(top: BorderSide(color: rc.line))),
+              decoration: BoxDecoration(color: rc.card, border: Border(top: BorderSide(color: rc.line))),
               child: Row(
                 children: [
                   RRoundIconButton(icon: Icons.add_rounded, color: rc.accent, size: 38, onTap: () {}),

@@ -24,9 +24,8 @@ class AutoCategoryScreen extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              color: rc.card,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: rc.line))),
+              decoration: BoxDecoration(color: rc.card, border: Border(bottom: BorderSide(color: rc.line))),
               child: Row(
                 children: [
                   RRoundIconButton(icon: Icons.arrow_back_ios_new_rounded, size: 32, onTap: () => Navigator.of(context).pop()),

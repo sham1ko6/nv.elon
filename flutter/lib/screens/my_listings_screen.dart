@@ -22,9 +22,8 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
       body: Column(
         children: [
           Container(
-            color: rc.card,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: rc.line))),
+            decoration: BoxDecoration(color: rc.card, border: Border(bottom: BorderSide(color: rc.line))),
             child: Row(
               children: [
                 _Tab(label: 'Faol 3', active: _tab == 0, onTap: () => setState(() => _tab = 0), rc: rc),
