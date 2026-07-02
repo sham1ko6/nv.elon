@@ -47,10 +47,13 @@ const ALLOWED_LISTING_STATUSES: ListingStatus[] = [
 export async function updateListingStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { status } = req.body as { status?: ListingStatus };
+    const { status, expires_at } = req.body as { status?: ListingStatus; expires_at?: string | null };
 
     if (!status || !ALLOWED_LISTING_STATUSES.includes(status)) {
       throw new AppError(400, "status noto'g'ri");
+    }
+    if (expires_at !== undefined && expires_at !== null && Number.isNaN(Date.parse(expires_at))) {
+      throw new AppError(400, "expires_at noto'g'ri");
     }
 
     const { data: existing, error: fetchError } = await supabase
@@ -70,7 +73,11 @@ export async function updateListingStatus(req: Request, res: Response, next: Nex
 
     const { data, error } = await supabase
       .from('listings')
-      .update({ status, published_at: publishedAt })
+      .update({
+        status,
+        published_at: publishedAt,
+        expires_at: expires_at !== undefined ? expires_at : (listing as any).expires_at,
+      })
       .eq('id', id)
       .select()
       .single();

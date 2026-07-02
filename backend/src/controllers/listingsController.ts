@@ -70,7 +70,7 @@ export async function listListings(req: Request, res: Response, next: NextFuncti
       .from('listings')
       .select('*', { count: 'exact' })
       .eq('status', 'active')
-      .gt('expires_at', new Date().toISOString());
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
 
     if (q) dbQuery = dbQuery.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
     if (categoryId !== null) dbQuery = dbQuery.eq('category_id', categoryId);
