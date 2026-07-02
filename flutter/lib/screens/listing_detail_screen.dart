@@ -6,6 +6,11 @@ import '../app_state.dart';
 import '../l10n/strings.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'ai_price_screen.dart';
+import 'escrow_screen.dart';
+import 'messages_screen.dart';
+import 'offer_screen.dart';
+import 'seller_shop_screen.dart';
 
 class ListingDetailScreen extends StatefulWidget {
   final Listing listing;
@@ -153,6 +158,32 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                         fontSize: 30, fontWeight: FontWeight.w700, color: rc.accent),
                   ),
                   const SizedBox(height: 8),
+                  // AI price badge
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => AiPriceScreen(listing: l)),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE9F4EC),
+                        border: Border.all(color: const Color(0xFFBFE0C9)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome_rounded, size: 14, color: Color(0xFF2F9E5C)),
+                          const SizedBox(width: 6),
+                          Text('AI: Yaxshi narx — bozordan 9% arzon',
+                              style: GoogleFonts.hankenGrotesk(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF1F7A44))),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFF1F7A44)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   // Title
                   Text(
                     l.title,
@@ -185,7 +216,14 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                   const SizedBox(height: 22),
 
                   // ── Seller card ───────────────────────────────
-                  Container(
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => SellerShopScreen(
+                        sellerName: l.sellerName,
+                        sellerInitials: l.sellerName.isNotEmpty ? l.sellerName.substring(0, 1).toUpperCase() : '?',
+                      ),
+                    )),
+                    child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: rc.card,
@@ -239,6 +277,59 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                         Icon(Icons.chevron_right_rounded, color: rc.muted),
                       ],
                     ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ── Offer + safe checkout ───────────────────────
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => OfferScreen.show(context, l),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: rc.card,
+                              border: Border.all(color: rc.line),
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.sell_outlined, size: 15, color: rc.accent),
+                                const SizedBox(width: 6),
+                                Text('Narx taklif qilish',
+                                    style: GoogleFonts.hankenGrotesk(fontSize: 12, fontWeight: FontWeight.w700, color: rc.ink)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EscrowScreen(listing: l))),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBEEE4),
+                              border: Border.all(color: rc.accent),
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.shield_outlined, size: 15, color: rc.accent),
+                                const SizedBox(width: 6),
+                                Text('Xavfsiz sotib olish',
+                                    style: GoogleFonts.hankenGrotesk(fontSize: 12, fontWeight: FontWeight.w700, color: rc.accent)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 22),
 
@@ -270,7 +361,13 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
               // Message
               Expanded(
                 child: GestureDetector(
-                  onTap: () {},
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => MessagesScreen(
+                      peerName: l.sellerName,
+                      peerInitials: l.sellerName.isNotEmpty ? l.sellerName.substring(0, 1).toUpperCase() : '?',
+                      listing: l,
+                    ),
+                  )),
                   child: Container(
                     height: 50,
                     decoration: BoxDecoration(

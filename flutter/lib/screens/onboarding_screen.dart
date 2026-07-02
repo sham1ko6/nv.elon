@@ -13,42 +13,58 @@ class OnboardingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: cAccent,
-      body: SafeArea(
+      body: Stack(
+        children: [
+          Positioned(
+            right: -50, top: -40,
+            child: Container(
+              width: 200, height: 200,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08)),
+            ),
+          ),
+          Positioned(
+            left: -40, bottom: 180,
+            child: Container(
+              width: 140, height: 140,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.06)),
+            ),
+          ),
+          SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
             children: [
               const SizedBox(height: 60),
               // Logo
-              const RavoqShield(size: 96, color: Colors.white),
+              const RavoqShield(size: 78, outerColor: Colors.white, innerColor: cAccent),
               const SizedBox(height: 20),
               Text(
-                'Ravoq.',
+                'Ravoq',
                 style: GoogleFonts.spectral(
                   fontSize: 42,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   color: Colors.white,
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(
                 S.get('tagline'),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.spectral(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 23,
+                  fontWeight: FontWeight.w600,
                   color: Colors.white,
-                  height: 1.35,
+                  height: 1.3,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Text(
                 S.get('heroSub'),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.hankenGrotesk(
                   fontSize: 13,
-                  color: Colors.white.withValues(alpha: 0.82),
+                  color: Colors.white.withValues(alpha: 0.85),
                   height: 1.55,
                 ),
               ),
@@ -128,6 +144,8 @@ class OnboardingScreen extends StatelessWidget {
             ],
           ),
         ),
+          ),
+        ],
       ),
     );
   }

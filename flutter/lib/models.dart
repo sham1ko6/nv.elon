@@ -3,21 +3,23 @@ class AppCategory {
   final String name;
   final String emoji;
   final String imageUrl;
+  final int count;
   const AppCategory({
     required this.id,
     required this.name,
     required this.emoji,
     required this.imageUrl,
+    this.count = 0,
   });
 }
 
 const kCategories = [
-  AppCategory(id: 'texnika',     name: 'Texnika',     emoji: '🚜', imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=120'),
-  AppCategory(id: 'uy-joy',      name: 'Uy-joy',      emoji: '🏠', imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=120'),
-  AppCategory(id: 'chorva',      name: 'Chorva',      emoji: '🐄', imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=120'),
-  AppCategory(id: 'avto',        name: 'Avto',        emoji: '🚗', imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=120'),
-  AppCategory(id: 'don',         name: 'Don',         emoji: '🌾', imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=120'),
-  AppCategory(id: 'elektronika', name: 'Elektronika', emoji: '📱', imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=120'),
+  AppCategory(id: 'texnika',     name: 'Texnika',     emoji: '🚜', imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=120', count: 640),
+  AppCategory(id: 'uy-joy',      name: 'Uy-joy',      emoji: '🏠', imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=120', count: 1240),
+  AppCategory(id: 'chorva',      name: 'Chorva',      emoji: '🐄', imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=120', count: 910),
+  AppCategory(id: 'avto',        name: 'Avto',        emoji: '🚗', imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=120', count: 1120),
+  AppCategory(id: 'don',         name: 'Don',         emoji: '🌾', imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=120', count: 430),
+  AppCategory(id: 'elektronika', name: 'Elektronika', emoji: '📱', imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=120', count: 3580),
 ];
 
 // ── Listing model ─────────────────────────────────────────────

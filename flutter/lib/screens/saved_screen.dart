@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app_state.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/listing_card.dart';
 import '../widgets/ravoq_shield.dart';
 import 'listing_detail_screen.dart';
@@ -23,7 +24,7 @@ class SavedScreen extends StatelessWidget {
         backgroundColor: rc.card,
         title: Row(
           children: [
-            RavoqShield(size: 20, color: cAccent, letterColor: Colors.white),
+            const RavoqShield(size: 20),
             const SizedBox(width: 8),
             Text(S.get('saved'),
                 style: GoogleFonts.spectral(
@@ -69,48 +70,14 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                  color: cAccent.withValues(alpha: 0.08), shape: BoxShape.circle),
-              child: Icon(Icons.favorite_border_rounded, size: 38, color: cAccent.withValues(alpha: 0.5)),
-            ),
-            const SizedBox(height: 18),
-            Text(S.get('noSaved'),
-                style: GoogleFonts.spectral(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: rc.ink)),
-            const SizedBox(height: 8),
-            Text(S.get('noSavedHint'),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted)),
-            const SizedBox(height: 24),
-            GestureDetector(
-              onTap: () {
-                // Navigate to home tab
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const MainShell()),
-                  (_) => false,
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  color: cAccent, borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(
-                      color: cAccent.withValues(alpha: 0.3), blurRadius: 12,
-                      offset: const Offset(0, 5))],
-                ),
-                child: Text(S.get('backHome'),
-                    style: GoogleFonts.hankenGrotesk(
-                        fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
-              ),
-            ),
-          ],
+      child: REmptyState(
+        icon: Icons.favorite_border_rounded,
+        title: S.get('noSaved'),
+        subtitle: S.get('noSavedHint'),
+        actionLabel: S.get('backHome'),
+        onAction: () => Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainShell()),
+          (_) => false,
         ),
       ),
     );

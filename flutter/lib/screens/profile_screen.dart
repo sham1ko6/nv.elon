@@ -1,30 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../app_state.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
-import '../widgets/ravoq_shield.dart';
+import '../widgets/common.dart';
 import 'auth_screen.dart';
+import 'business_plans_screen.dart';
+import 'invite_friend_screen.dart';
+import 'lang_screen.dart';
+import 'my_listings_screen.dart';
+import 'notifications_screen.dart';
+import 'payment_screen.dart';
+import 'saved_screen.dart';
+import 'verification_screen.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 3, vsync: this);
-  }
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,302 +30,255 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: rc.bg,
-      body: CustomScrollView(
+      body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        slivers: [
-          // ── Header ──────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              color: cAccent,
-              padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
-              child: Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ──────────────────────────────────────────
+            Container(
+              color: rc.accent,
+              padding: const EdgeInsets.fromLTRB(18, 50, 18, 56),
+              child: Stack(
                 children: [
-                  // Avatar
-                  Container(
-                    width: 76, height: 76,
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: Center(
-                      child: Text(initials,
-                          style: GoogleFonts.spectral(
-                              fontSize: 30, fontWeight: FontWeight.w700, color: cAccent)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(name, style: GoogleFonts.spectral(
-                      fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-                  if (phone.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(phone, style: GoogleFonts.hankenGrotesk(
-                        fontSize: 13, color: Colors.white.withValues(alpha: 0.8))),
-                  ],
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.verified_rounded, size: 13, color: Colors.white),
-                        const SizedBox(width: 5),
-                        Text(S.get('verified'),
-                            style: GoogleFonts.hankenGrotesk(
-                                fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFFD700)),
-                        const SizedBox(width: 3),
-                        Text('4.8', style: GoogleFonts.hankenGrotesk(
-                            fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Stats row ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              color: rc.card,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Row(
-                children: [
-                  _StatItem(label: S.get('myAds'), value: '12', rc: rc),
-                  _Divider(),
-                  _StatItem(label: S.get('views'), value: '3.4K', rc: rc),
-                  _Divider(),
-                  _StatItem(label: S.get('rating'), value: '4.8', rc: rc),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Wallet card ──────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2C1810), Color(0xFF4A2A18)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(S.get('balance'),
-                            style: GoogleFonts.hankenGrotesk(
-                                fontSize: 12, color: Colors.white.withValues(alpha: 0.75))),
-                        const SizedBox(height: 6),
-                        Text('125,000 so\'m',
-                            style: GoogleFonts.spectral(
-                                fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
-                      ],
-                    ),
-                    const Spacer(),
-                    GestureDetector(
+                  Positioned(
+                    right: 0, top: 0,
+                    child: GestureDetector(
                       onTap: () {},
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                        width: 34, height: 34,
                         decoration: BoxDecoration(
-                          color: cAmber,
-                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.white.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
                         ),
-                        child: Text(S.get('recharge'),
-                            style: GoogleFonts.hankenGrotesk(
-                                fontSize: 13, fontWeight: FontWeight.w700,
-                                color: const Color(0xFF3A2000))),
+                        child: const Icon(Icons.settings_rounded, color: Colors.white, size: 17),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── My ads tabs ──────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                const SizedBox(height: 18),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(S.get('myAds'),
-                      style: GoogleFonts.spectral(
-                          fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  color: rc.card,
-                  child: TabBar(
-                    controller: _tabs,
-                    labelColor: cAccent,
-                    unselectedLabelColor: rc.muted,
-                    indicatorColor: cAccent,
-                    labelStyle: GoogleFonts.hankenGrotesk(
-                        fontSize: 13, fontWeight: FontWeight.w700),
-                    unselectedLabelStyle: GoogleFonts.hankenGrotesk(fontSize: 13),
-                    tabs: [
-                      Tab(text: S.get('active')),
-                      Tab(text: S.get('sold')),
-                      Tab(text: S.get('archived')),
-                    ],
                   ),
-                ),
-                SizedBox(
-                  height: 120,
-                  child: TabBarView(
-                    controller: _tabs,
-                    children: [
-                      _EmptyTab(label: "${S.get('active')} ${S.get('myAds').toLowerCase()}", rc: rc),
-                      _EmptyTab(label: "${S.get('sold')}", rc: rc),
-                      _EmptyTab(label: S.get('archived'), rc: rc),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Settings ─────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(S.get('language'),
-                      style: GoogleFonts.hankenGrotesk(
-                          fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
-                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      for (final l in [('uz', '🇺🇿 UZ'), ('ru', '🇷🇺 RU'), ('en', '🇬🇧 EN')])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: GestureDetector(
-                            onTap: () => state.setLang(l.$1),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      Container(
+                        width: 60, height: 60,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+                        alignment: Alignment.center,
+                        child: Text(initials, style: spectral(size: 22, weight: FontWeight.w800, color: rc.accent)),
+                      ),
+                      const SizedBox(width: 13),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: spectral(size: 20, weight: FontWeight.w700, color: Colors.white, height: 1.1)),
+                            const SizedBox(height: 3),
+                            Text(phone.isNotEmpty ? phone : 'Foydalanuvchi',
+                                style: hanken(size: 11.5, color: Colors.white.withValues(alpha: 0.82))),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                               decoration: BoxDecoration(
-                                color: state.lang == l.$1 ? cAccent : rc.card,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                    color: state.lang == l.$1 ? cAccent : rc.line),
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(l.$2,
-                                  style: GoogleFonts.hankenGrotesk(
-                                      fontSize: 13, fontWeight: FontWeight.w600,
-                                      color: state.lang == l.$1 ? Colors.white : rc.ink)),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Text(S.get('theme'),
-                      style: GoogleFonts.hankenGrotesk(
-                          fontSize: 13, fontWeight: FontWeight.w600, color: rc.ink)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      for (final t in [
-                        (ThemeMode.light, S.get('light')),
-                        (ThemeMode.dark, S.get('dark')),
-                        (ThemeMode.system, S.get('system')),
-                      ])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: GestureDetector(
-                            onTap: () => state.setThemeMode(t.$1),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: state.themeMode == t.$1 ? cAccent : rc.card,
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                    color: state.themeMode == t.$1 ? cAccent : rc.line),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.star_rounded, size: 11, color: Colors.white),
+                                  const SizedBox(width: 4),
+                                  Text('4.9 reyting',
+                                      style: hanken(size: 10.5, weight: FontWeight.w700, color: Colors.white)),
+                                ],
                               ),
-                              child: Text(t.$2,
-                                  style: GoogleFonts.hankenGrotesk(
-                                      fontSize: 13, fontWeight: FontWeight.w600,
-                                      color: state.themeMode == t.$1 ? Colors.white : rc.ink)),
                             ),
-                          ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-          ),
 
-          // ── Menu items ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                children: [
-                  _MenuItem(
-                    icon: Icons.notifications_outlined,
-                    label: S.get('notifications'),
-                    onTap: () {},
-                    rc: rc,
-                  ),
-                  _MenuItem(
-                    icon: Icons.help_outline_rounded,
-                    label: 'Yordam',
-                    onTap: () {},
-                    rc: rc,
-                  ),
-                  _MenuItem(
-                    icon: Icons.description_outlined,
-                    label: 'Foydalanish shartlari',
-                    onTap: () {},
-                    rc: rc,
-                  ),
-                  const SizedBox(height: 8),
-                  // Logout
-                  GestureDetector(
-                    onTap: () {
-                      state.logout();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            // ── Overlapping card ──────────────────────────────────
+            Transform.translate(
+              offset: const Offset(0, -38),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
+                        color: rc.card,
+                        border: Border.all(color: rc.line),
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: warmShadow(rc.dark),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
-                          const SizedBox(width: 12),
-                          Text(S.get('logout'),
-                              style: GoogleFonts.hankenGrotesk(
-                                  fontSize: 14, fontWeight: FontWeight.w600,
-                                  color: Colors.red)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                RLabel(S.get('balance')),
+                                const SizedBox(height: 3),
+                                RichText(
+                                  text: TextSpan(
+                                    style: spectral(size: 21, weight: FontWeight.w800, color: rc.ink),
+                                    children: [
+                                      const TextSpan(text: '1 250 000 '),
+                                      TextSpan(text: "so'm", style: hanken(size: 13, weight: FontWeight.w600, color: rc.muted)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const PaymentScreen(amount: 0, planLabel: "Hamyon to'ldirish")),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                              decoration: BoxDecoration(color: rc.accent, borderRadius: BorderRadius.circular(12)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.add_rounded, color: Colors.white, size: 14),
+                                  const SizedBox(width: 5),
+                                  Text(S.get('recharge'), style: hanken(size: 12, weight: FontWeight.w700, color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 48),
-                ],
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      decoration: BoxDecoration(
+                        color: rc.card,
+                        border: Border.all(color: rc.line),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          _StatItem(label: S.get('myAds'), value: '4', rc: rc, divider: true),
+                          _StatItem(label: S.get('sold'), value: '12', rc: rc, divider: true),
+                          _StatItem(label: S.get('views'), value: '3.2k', rc: rc, divider: false),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _MenuRow(
+                      icon: Icons.receipt_long_rounded,
+                      label: S.get('myAds'),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyListingsScreen())),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.favorite_border_rounded,
+                      label: S.get('saved'),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SavedScreen())),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.credit_card_rounded,
+                      label: "To'lovlar tarixi",
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PaymentScreen(amount: 249000, planLabel: 'Biznes Pro · 1 oy')),
+                      ),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.notifications_outlined,
+                      label: S.get('notifications'),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Sotuvchini tasdiqlash',
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationScreen())),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.card_giftcard_rounded,
+                      label: "Do'stni taklif qilish",
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InviteFriendScreen())),
+                      rc: rc,
+                    ),
+                    _MenuRow(
+                      icon: Icons.language_rounded,
+                      label: S.get('language'),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LangScreen())),
+                      rc: rc,
+                    ),
+                    const SizedBox(height: 8),
+                    // Biznes CTA
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BusinessPlansScreen())),
+                      child: Container(
+                        padding: const EdgeInsets.all(13),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFF3A2A1C), Color(0xFF5A3A22)]),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 34, height: 34,
+                              decoration: BoxDecoration(
+                                color: cAmber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.workspace_premium_rounded, color: cAmber, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Biznes profilga o\'tish',
+                                      style: hanken(size: 12.5, weight: FontWeight.w700, color: Colors.white)),
+                                  Text("Do'kon, statistika, reklama",
+                                      style: hanken(size: 9.5, color: Colors.white.withValues(alpha: 0.6))),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: cAmber, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    GestureDetector(
+                      onTap: () => state.logout(),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
+                            const SizedBox(width: 10),
+                            Text(S.get('logout'), style: hanken(size: 14, weight: FontWeight.w600, color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -350,62 +293,14 @@ class _LoginPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: rc.bg,
-      appBar: AppBar(
-        backgroundColor: rc.card,
-        title: Row(
-          children: [
-            RavoqShield(size: 20, color: cAccent, letterColor: Colors.white),
-            const SizedBox(width: 7),
-            Text('Ravoq.', style: GoogleFonts.spectral(
-                fontSize: 18, fontWeight: FontWeight.w700, color: cAccent)),
-          ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: rc.line),
-        ),
-      ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                    color: cAccent.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(Icons.person_outline_rounded, size: 40, color: cAccent),
-              ),
-              const SizedBox(height: 20),
-              Text(S.get('loginRequired'),
-                  style: GoogleFonts.spectral(
-                      fontSize: 22, fontWeight: FontWeight.w700, color: rc.ink)),
-              const SizedBox(height: 8),
-              Text(S.get('loginToAccess'),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted)),
-              const SizedBox(height: 28),
-              GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AuthScreen()),
-                ),
-                child: Container(
-                  height: 50, width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: cAccent, borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(
-                        color: cAccent.withValues(alpha: 0.35), blurRadius: 14,
-                        offset: const Offset(0, 6))],
-                  ),
-                  child: Center(
-                    child: Text(S.get('loginBtn'),
-                        style: GoogleFonts.hankenGrotesk(
-                            fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-                  ),
-                ),
-              ),
-            ],
+        child: REmptyState(
+          icon: Icons.person_outline_rounded,
+          title: S.get('loginRequired'),
+          subtitle: S.get('loginToAccess'),
+          actionLabel: S.get('loginBtn'),
+          onAction: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AuthScreen()),
           ),
         ),
       ),
@@ -416,66 +311,48 @@ class _LoginPrompt extends StatelessWidget {
 class _StatItem extends StatelessWidget {
   final String label, value;
   final RC rc;
-  const _StatItem({required this.label, required this.value, required this.rc});
+  final bool divider;
+  const _StatItem({required this.label, required this.value, required this.rc, required this.divider});
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Column(
-        children: [
-          Text(value, style: GoogleFonts.spectral(
-              fontSize: 20, fontWeight: FontWeight.w700, color: rc.accent)),
-          const SizedBox(height: 3),
-          Text(label, style: GoogleFonts.hankenGrotesk(fontSize: 11, color: rc.muted)),
-        ],
+      child: Container(
+        decoration: divider ? BoxDecoration(border: Border(right: BorderSide(color: rc.line))) : null,
+        child: Column(
+          children: [
+            Text(value, style: spectral(size: 18, weight: FontWeight.w800, color: rc.accent)),
+            const SizedBox(height: 1),
+            Text(label, style: hanken(size: 9.5, color: rc.muted)),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(width: 1, height: 32, color: RC.of(context).line);
-  }
-}
-
-class _EmptyTab extends StatelessWidget {
-  final String label;
-  final RC rc;
-  const _EmptyTab({required this.label, required this.rc});
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        '$label yo\'q',
-        style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
-      ),
-    );
-  }
-}
-
-class _MenuItem extends StatelessWidget {
+class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final RC rc;
-  const _MenuItem(
-      {required this.icon, required this.label, required this.onTap, required this.rc});
+  const _MenuRow({required this.icon, required this.label, required this.onTap, required this.rc});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: rc.line))),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: rc.muted),
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(color: rc.accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: rc.accent, size: 17),
+            ),
             const SizedBox(width: 12),
-            Text(label, style: GoogleFonts.hankenGrotesk(
-                fontSize: 14, fontWeight: FontWeight.w500, color: rc.ink)),
-            const Spacer(),
-            Icon(Icons.chevron_right_rounded, size: 18, color: rc.muted),
+            Expanded(child: Text(label, style: hanken(size: 13, weight: FontWeight.w600, color: rc.ink))),
+            Icon(Icons.chevron_right_rounded, size: 16, color: rc.muted),
           ],
         ),
       ),

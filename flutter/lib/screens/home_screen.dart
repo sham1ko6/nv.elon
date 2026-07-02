@@ -11,6 +11,7 @@ import 'listing_detail_screen.dart';
 import 'notifications_screen.dart';
 import 'post_ad_screen.dart';
 import 'search_screen.dart';
+import 'story_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -75,11 +76,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   children: [
                     // Logo
-                    RavoqShield(size: 22, color: cAccent, letterColor: Colors.white),
+                    const RavoqShield(size: 22),
                     const SizedBox(width: 7),
-                    Text('Ravoq.',
+                    RichText(
+                      text: TextSpan(
                         style: GoogleFonts.spectral(
-                            fontSize: 20, fontWeight: FontWeight.w700, color: rc.accent)),
+                            fontSize: 20, fontWeight: FontWeight.w800, color: rc.ink),
+                        children: [
+                          const TextSpan(text: 'Ravoq'),
+                          TextSpan(text: '.', style: TextStyle(color: rc.accent)),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 10),
                     // Location pill
                     Expanded(
@@ -217,6 +225,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
+                        // Promoted story
+                        _StoryCircle(
+                          imageUrl: kMockListings.first.imageUrl,
+                          label: kMockListings.first.sellerName,
+                          isDashed: false,
+                          isStory: true,
+                          rc: rc,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => StoryScreen(listing: kMockListings.first)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
                         // Category circles
                         ...kCategories.map((cat) => Padding(
                           padding: const EdgeInsets.only(right: 12),
@@ -312,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const RavoqShield(size: 60, color: Colors.white),
+                          const RavoqShield(size: 60, outerColor: Colors.white, innerColor: cAccent),
                         ],
                       ),
                     ),
@@ -417,6 +437,7 @@ class _StoryCircle extends StatelessWidget {
   final String? imageUrl;
   final String label;
   final bool isDashed;
+  final bool isStory;
   final RC rc;
   final VoidCallback onTap;
 
@@ -425,6 +446,7 @@ class _StoryCircle extends StatelessWidget {
     this.imageUrl,
     required this.label,
     required this.isDashed,
+    this.isStory = false,
     required this.rc,
     required this.onTap,
   });
@@ -444,7 +466,7 @@ class _StoryCircle extends StatelessWidget {
                 color: rc.card,
                 border: isDashed
                     ? Border.all(color: rc.line, width: 1.5)
-                    : Border.all(color: rc.line, width: 2),
+                    : Border.all(color: isStory ? rc.accent : rc.line, width: 2),
               ),
               child: ClipOval(
                 child: imageUrl != null && imageUrl!.isNotEmpty

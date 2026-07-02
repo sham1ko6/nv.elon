@@ -37,23 +37,7 @@ class _LangScreenState extends State<LangScreen> {
             children: [
               const SizedBox(height: 40),
               // Logo
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RavoqShield(size: 28, color: cAccent, letterColor: Colors.white),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Ravoq.',
-                      style: GoogleFonts.spectral(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: cAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const RavoqShield(size: 48),
               const SizedBox(height: 40),
               Text(
                 S.get('selectLang'),

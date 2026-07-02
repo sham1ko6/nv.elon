@@ -6,8 +6,10 @@ import '../app_state.dart';
 import '../l10n/strings.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/listing_card.dart';
 import 'listing_detail_screen.dart';
+import 'map_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final String? initialCategory;
@@ -144,6 +146,16 @@ class _SearchScreenState extends State<SearchScreen> {
                           contentPadding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MapScreen())),
+                    child: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: rc.bg, border: Border.all(color: rc.line), borderRadius: BorderRadius.circular(12)),
+                      child: Icon(Icons.map_outlined, color: cAccent, size: 18),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -328,15 +340,14 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off_rounded, size: 48, color: rc.muted),
-          const SizedBox(height: 12),
-          Text(S.get('noResults'),
-              style: GoogleFonts.spectral(
-                  fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
-        ],
+      child: REmptyState(
+        icon: Icons.search_off_rounded,
+        title: S.get('noResults'),
+        subtitle: "Filtrlarni kengaytiring yoki shu qidiruvga obuna bo'ling — yangi e'lon chiqsa, xabar beramiz.",
+        actionLabel: 'Qidiruvga obuna',
+        onAction: () => ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Qidiruvga obuna bo\'ldingiz')),
+        ),
       ),
     );
   }

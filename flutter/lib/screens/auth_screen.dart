@@ -123,9 +123,9 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // Back button
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(12, 12, 16, 0),
               child: Row(
                 children: [
                   GestureDetector(
@@ -136,36 +136,54 @@ class _AuthScreenState extends State<AuthScreen> {
                         Navigator.of(context).pop();
                       }
                     },
-                    child: Icon(Icons.arrow_back_ios_rounded, color: rc.ink, size: 20),
+                    child: Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: rc.card,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: rc.line),
+                      ),
+                      child: Icon(Icons.arrow_back_ios_new_rounded, color: rc.ink, size: 15),
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  RavoqShield(size: 22, color: cAccent, letterColor: Colors.white),
-                  const SizedBox(width: 7),
-                  Text('Ravoq.',
-                      style: GoogleFonts.spectral(
-                          fontSize: 18, fontWeight: FontWeight.w700, color: cAccent)),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            // Centered hero: shield + wordmark + helper text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
+                  const SizedBox(height: 18),
+                  const RavoqShield(size: 56),
+                  const SizedBox(height: 16),
+                  RichText(
+                    text: TextSpan(
+                      style: spectral(size: 30, weight: FontWeight.w800, color: rc.ink),
+                      children: [
+                        const TextSpan(text: 'Ravoq'),
+                        TextSpan(text: '.', style: TextStyle(color: rc.accent)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    _step == 0
+                        ? S.get('enterPhone')
+                        : '${S.get('codeSent')} +998 ${_phone.substring(0, 2)} *** ** ${_phone.substring(7)}',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.hankenGrotesk(fontSize: 12.5, color: rc.muted, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
             // Content
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _step == 0 ? S.get('enterPhone') : S.get('enterOtp'),
-                    style: GoogleFonts.spectral(
-                        fontSize: 24, fontWeight: FontWeight.w700, color: rc.ink),
-                  ),
-                  const SizedBox(height: 6),
-                  if (_step == 1)
-                    Text(
-                      '${S.get('codeSent')} +998 ${_phone.substring(0, 2)} *** ** ${_phone.substring(7)}',
-                      style: GoogleFonts.hankenGrotesk(fontSize: 13, color: rc.muted),
-                    ),
-                  const SizedBox(height: 28),
                   // Display
                   _step == 0 ? _PhoneDisplay(phone: _phone, rc: rc) : _OtpDisplay(otp: _otp, rc: rc),
                   if (_error != null) ...[

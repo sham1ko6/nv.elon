@@ -72,13 +72,13 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const RavoqShield(size: 80, color: Colors.white),
+              const RavoqShield(size: 80, outerColor: Colors.white, innerColor: cAccent),
               const SizedBox(height: 18),
               Text(
-                'Ravoq.',
+                'Ravoq',
                 style: GoogleFonts.spectral(
                   fontSize: 44,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   color: Colors.white,
                   letterSpacing: -0.5,
                 ),

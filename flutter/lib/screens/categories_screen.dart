@@ -1,130 +1,134 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../l10n/strings.dart';
 import '../models.dart';
 import '../theme.dart';
-import '../widgets/ravoq_shield.dart';
+import 'auto_category_screen.dart';
 import 'search_screen.dart';
 
-class CategoriesScreen extends StatelessWidget {
+const _catIcons = {
+  'uy-joy': Icons.house_rounded,
+  'elektronika': Icons.devices_rounded,
+  'texnika': Icons.agriculture_rounded,
+  'chorva': Icons.pets_rounded,
+  'don': Icons.grass_rounded,
+  'avto': Icons.directions_car_rounded,
+};
+
+class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
+  @override
+  State<CategoriesScreen> createState() => _CategoriesScreenState();
+}
+
+class _CategoriesScreenState extends State<CategoriesScreen> {
+  final _ctrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  List<AppCategory> get _filtered {
+    if (_query.isEmpty) return kCategories;
+    return kCategories
+        .where((c) => c.name.toLowerCase().contains(_query.toLowerCase()))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final rc = RC.of(context);
     return Scaffold(
       backgroundColor: rc.bg,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            backgroundColor: rc.card,
-            surfaceTintColor: Colors.transparent,
-            title: Row(
-              children: [
-                RavoqShield(size: 22, color: cAccent, letterColor: Colors.white),
-                const SizedBox(width: 8),
-                Text('Ravoq.',
-                    style: GoogleFonts.spectral(
-                        fontSize: 18, fontWeight: FontWeight.w700, color: rc.accent)),
-              ],
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: rc.line),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            sliver: SliverToBoxAdapter(
-              child: Text(
-                S.get('categories'),
-                style: GoogleFonts.spectral(
-                    fontSize: 24, fontWeight: FontWeight.w700, color: rc.ink),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(S.get('categories'),
+                      style: spectral(size: 22, weight: FontWeight.w800, color: rc.ink)),
+                  const SizedBox(height: 11),
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: rc.card,
+                      border: Border.all(color: rc.line),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: TextField(
+                      controller: _ctrl,
+                      onChanged: (v) => setState(() => _query = v),
+                      style: hanken(size: 12.5, color: rc.ink),
+                      decoration: InputDecoration(
+                        hintText: 'Kategoriya qidirish…',
+                        hintStyle: hanken(size: 12.5, color: rc.muted),
+                        prefixIcon: Icon(Icons.search_rounded, size: 16, color: rc.muted),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            sliver: SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) {
-                  final cat = kCategories[i];
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 11,
+                  crossAxisSpacing: 11,
+                  childAspectRatio: 1.5,
+                ),
+                itemCount: _filtered.length,
+                itemBuilder: (ctx, i) {
+                  final cat = _filtered[i];
                   return GestureDetector(
                     onTap: () => Navigator.of(ctx).push(MaterialPageRoute(
-                      builder: (_) => SearchScreen(initialCategory: cat.id),
+                      builder: (_) => cat.id == 'avto'
+                          ? const AutoCategoryScreen()
+                          : SearchScreen(initialCategory: cat.id),
                     )),
                     child: Container(
+                      padding: const EdgeInsets.all(13),
                       decoration: BoxDecoration(
                         color: rc.card,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: warmShadow(rc.dark),
+                        border: Border.all(color: rc.line),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // Background image
-                            if (cat.imageUrl.isNotEmpty)
-                              Image.network(
-                                cat.imageUrl,
-                                fit: BoxFit.cover,
-                                color: Colors.black.withValues(alpha: 0.38),
-                                colorBlendMode: BlendMode.darken,
-                                errorBuilder: (_, __, ___) => Container(color: cAccent.withValues(alpha: 0.12)),
-                              )
-                            else
-                              Container(color: cAccent.withValues(alpha: 0.12)),
-                            // Gradient overlay
-                            Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withValues(alpha: 0.6),
-                                  ],
-                                ),
-                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 42, height: 42,
+                            decoration: BoxDecoration(
+                              color: rc.accent.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            // Label
-                            Positioned(
-                              bottom: 12, left: 12, right: 12,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(cat.emoji, style: const TextStyle(fontSize: 22)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    cat.name,
-                                    style: GoogleFonts.hankenGrotesk(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                            child: Icon(_catIcons[cat.id] ?? Icons.category_rounded,
+                                color: rc.accent, size: 22),
+                          ),
+                          const SizedBox(height: 9),
+                          Text(cat.name,
+                              style: spectral(size: 13.5, weight: FontWeight.w700, color: rc.ink)),
+                          const SizedBox(height: 1),
+                          Text("${cat.count} e'lon",
+                              style: hanken(size: 10, color: rc.muted)),
+                        ],
                       ),
                     ),
                   );
                 },
-                childCount: kCategories.length,
-              ),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
