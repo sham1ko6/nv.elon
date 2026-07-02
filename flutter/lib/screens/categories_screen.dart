@@ -7,11 +7,13 @@ import 'search_screen.dart';
 
 const _catIcons = {
   'uy-joy': Icons.house_rounded,
+  'transport': Icons.directions_car_rounded,
   'elektronika': Icons.devices_rounded,
-  'texnika': Icons.agriculture_rounded,
-  'chorva': Icons.pets_rounded,
-  'don': Icons.grass_rounded,
-  'avto': Icons.directions_car_rounded,
+  'qishloq-texnika': Icons.agriculture_rounded,
+  'don-mahsulotlari': Icons.grass_rounded,
+  'chorvachilik': Icons.pets_rounded,
+  'kiyim': Icons.checkroom_rounded,
+  'uy-jihozlari': Icons.chair_rounded,
 };
 
 class CategoriesScreen extends StatefulWidget {
@@ -91,7 +93,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   final cat = _filtered[i];
                   return GestureDetector(
                     onTap: () => Navigator.of(ctx).push(MaterialPageRoute(
-                      builder: (_) => cat.id == 'avto'
+                      builder: (_) => cat.id == 'transport'
                           ? const AutoCategoryScreen()
                           : SearchScreen(initialCategory: cat.id),
                     )),

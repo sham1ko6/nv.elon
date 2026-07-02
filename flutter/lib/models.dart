@@ -1,5 +1,46 @@
+// ── Backend category (real /api/categories rows) ────────────────
+//
+// `slug` is what the backend's GET /listings?category= filter and
+// POST /listings category_id resolve against — must match exactly.
+
+class Category {
+  final int id;
+  final String slug;
+  final String nameUz;
+  final String icon;
+
+  const Category({
+    required this.id,
+    required this.slug,
+    required this.nameUz,
+    required this.icon,
+  });
+
+  factory Category.fromJson(Map<String, dynamic> j) => Category(
+        id: (j['id'] as num).toInt(),
+        slug: j['slug'] ?? '',
+        nameUz: j['name_uz'] ?? j['slug'] ?? '',
+        icon: j['icon'] ?? '📦',
+      );
+}
+
+/// Fallback categories matching the backend seed exactly (id/slug), used
+/// only if GET /categories fails — keeps category_id valid even offline.
+const kCategoryFallback = [
+  Category(id: 1, slug: 'uy-joy',           nameUz: 'Uy-joy',           icon: '🏠'),
+  Category(id: 2, slug: 'transport',        nameUz: 'Transport',        icon: '🚗'),
+  Category(id: 3, slug: 'elektronika',      nameUz: 'Elektronika',      icon: '📱'),
+  Category(id: 4, slug: 'qishloq-texnika',  nameUz: 'Qishloq texnika',  icon: '🚜'),
+  Category(id: 5, slug: 'don-mahsulotlari', nameUz: 'Don mahsulotlari', icon: '🌾'),
+  Category(id: 6, slug: 'chorvachilik',     nameUz: 'Chorvachilik',     icon: '🐄'),
+  Category(id: 7, slug: 'kiyim',            nameUz: 'Kiyim',            icon: '👕'),
+  Category(id: 8, slug: 'uy-jihozlari',     nameUz: 'Uy jihozlari',     icon: '🛋️'),
+];
+
+// ── Local UI category (browse chips/grid — slugs match backend) ─
+
 class AppCategory {
-  final String id;
+  final String id; // == backend slug
   final String name;
   final String emoji;
   final String imageUrl;
@@ -14,12 +55,14 @@ class AppCategory {
 }
 
 const kCategories = [
-  AppCategory(id: 'texnika',     name: 'Texnika',     emoji: '🚜', imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=120', count: 640),
-  AppCategory(id: 'uy-joy',      name: 'Uy-joy',      emoji: '🏠', imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=120', count: 1240),
-  AppCategory(id: 'chorva',      name: 'Chorva',      emoji: '🐄', imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=120', count: 910),
-  AppCategory(id: 'avto',        name: 'Avto',        emoji: '🚗', imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=120', count: 1120),
-  AppCategory(id: 'don',         name: 'Don',         emoji: '🌾', imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=120', count: 430),
-  AppCategory(id: 'elektronika', name: 'Elektronika', emoji: '📱', imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=120', count: 3580),
+  AppCategory(id: 'uy-joy',           name: 'Uy-joy',           emoji: '🏠', imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=120', count: 1240),
+  AppCategory(id: 'transport',        name: 'Transport',        emoji: '🚗', imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=120', count: 1120),
+  AppCategory(id: 'elektronika',      name: 'Elektronika',      emoji: '📱', imageUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=120', count: 3580),
+  AppCategory(id: 'qishloq-texnika',  name: 'Qishloq texnika',  emoji: '🚜', imageUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=120', count: 640),
+  AppCategory(id: 'don-mahsulotlari', name: 'Don mahsulotlari', emoji: '🌾', imageUrl: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=120', count: 430),
+  AppCategory(id: 'chorvachilik',     name: 'Chorvachilik',     emoji: '🐄', imageUrl: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=120', count: 910),
+  AppCategory(id: 'kiyim',            name: 'Kiyim',            emoji: '👕', imageUrl: 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=120', count: 520),
+  AppCategory(id: 'uy-jihozlari',     name: 'Uy jihozlari',     emoji: '🛋️', imageUrl: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=120', count: 310),
 ];
 
 // ── Listing model ─────────────────────────────────────────────
@@ -58,26 +101,43 @@ class Listing {
     this.isTop = false,
     this.condition = 'used',
     this.isCompany = false,
+    this.status = 'active',
     this.sellerRating = 4.8,
   });
+
+  // Backend listing status (draft/pending_payment/active/expired/rejected/sold).
+  final String status;
+
+  static double _toDouble(dynamic v, double fallback) {
+    if (v == null) return fallback;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fallback;
+  }
+
+  static int _toInt(dynamic v, int fallback) {
+    if (v == null) return fallback;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fallback;
+  }
 
   factory Listing.fromJson(Map<String, dynamic> j) => Listing(
         id: '${j['id']}',
         title: j['title'] ?? '',
-        price: (j['price'] ?? 0).toDouble(),
+        price: _toDouble(j['price'], 0),
         currency: j['currency'] ?? 'USD',
         location: j['location'] ?? '',
         imageUrl: j['image_url'] ?? j['imageUrl'] ?? '',
         category: j['category_name'] ?? j['category'] ?? '',
         description: j['description'] ?? '',
         sellerName: j['seller_name'] ?? j['user_name'] ?? '',
-        phone: j['phone'] ?? '',
-        views: (j['views'] ?? 0) as int,
+        phone: j['phone'] ?? j['contact_phone'] ?? '',
+        views: _toInt(j['views'], 0),
         date: j['created_at'] ?? j['date'] ?? '',
         isTop: j['is_top'] == true || j['is_top'] == 1,
         condition: j['condition'] ?? 'used',
         isCompany: j['is_company'] == true || j['is_company'] == 1,
-        sellerRating: (j['seller_rating'] ?? 4.8).toDouble(),
+        sellerRating: _toDouble(j['seller_rating'], 4.8),
+        status: j['status'] ?? 'active',
       );
 
   Map<String, dynamic> toJson() => {

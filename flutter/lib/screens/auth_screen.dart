@@ -54,12 +54,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await api.sendOtp('+998$_phone');
+      if (!mounted) return;
       setState(() { _step = 1; _loading = false; _resendSec = 60; });
       _startTimer();
     } catch (e) {
-      // Simulate success in demo mode
-      setState(() { _step = 1; _loading = false; _resendSec = 60; });
-      _startTimer();
+      if (!mounted) return;
+      setState(() { _loading = false; _error = e.toString().replaceFirst('Exception: ', ''); });
     }
   }
 
@@ -71,28 +71,21 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       final state = AppStateScope.of(context);
       state.setAuth(
-        res['token'] as String? ?? 'demo_token',
-        res['user'] as Map<String, dynamic>? ?? {
-          'name': 'Foydalanuvchi',
-          'phone': '+998$_phone',
-        },
+        res['accessToken'] as String,
+        res['user'] as Map<String, dynamic>,
+        refreshToken: res['refreshToken'] as String?,
       );
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const MainShell()),
         (_) => false,
       );
-    } catch (_) {
-      // Demo: accept any 6-digit code
+    } catch (e) {
       if (!mounted) return;
-      final state = AppStateScope.of(context);
-      state.setAuth('demo_token_$_phone', {
-        'name': 'Demo Foydalanuvchi',
-        'phone': '+998$_phone',
+      setState(() {
+        _loading = false;
+        _otp = '';
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (_) => false,
-      );
     }
   }
 

@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../l10n/strings.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'auth_screen.dart';
 
 class PostAdScreen extends StatefulWidget {
   const PostAdScreen({super.key});
@@ -24,7 +25,8 @@ class _PostAdScreenState extends State<PostAdScreen> {
   final _priceCtrl = TextEditingController();
   final _locationCtrl = TextEditingController(text: 'Toshkent shahar');
   final _phoneCtrl = TextEditingController(text: '+998 ');
-  String _catId = kCategories.first.id;
+  List<Category> _categories = kCategoryFallback;
+  Category? _category;
   String _currency = 'USD';
   String _condition = 'used';
   bool _isTop = false;
@@ -32,6 +34,27 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   final List<XFile> _images = [];
   final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _category = _categories.first;
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final cats = await api.getCategories();
+      if (!mounted || cats.isEmpty) return;
+      setState(() {
+        _categories = cats;
+        _category = cats.first;
+      });
+    } catch (_) {
+      // Keep the fallback list (matches the real seeded ids) so posting
+      // still works with a valid category_id even if this call fails.
+    }
+  }
 
   @override
   void dispose() {
@@ -67,29 +90,70 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   Future<void> _submit() async {
     final state = AppStateScope.of(context);
+
+    if (!state.isLoggedIn) {
+      _snack("E'lon joylash uchun avval tizimga kiring");
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
+      return;
+    }
+
+    final category = _category;
+    if (category == null) {
+      _snack('Kategoriya yuklanmadi, birozdan so\'ng qayta urining');
+      return;
+    }
+
+    // Backend requires +998XXXXXXXXX with no spaces.
+    final contactPhone = _phoneCtrl.text.replaceAll(RegExp(r'\s'), '');
+    if (!RegExp(r'^\+998\d{9}$').hasMatch(contactPhone)) {
+      setState(() => _step = 1);
+      _snack("Telefon raqami formati noto'g'ri (+998XXXXXXXXX)");
+      return;
+    }
+
+    final price = double.tryParse(_priceCtrl.text.trim());
+    if (price == null || price <= 0) {
+      setState(() => _step = 1);
+      _snack("Narx to'g'ri kiritilmagan");
+      return;
+    }
+
     setState(() => _loading = true);
 
     final body = {
       'title': _titleCtrl.text.trim(),
       'description': _descCtrl.text.trim(),
-      'price': double.tryParse(_priceCtrl.text.trim()) ?? 0,
+      'price': price,
       'currency': _currency,
+      'category_id': category.id,
       'location': _locationCtrl.text.trim(),
-      'phone': _phoneCtrl.text.trim(),
-      'category': _catId,
-      'condition': _condition,
-      'is_top': _isTop,
+      'contact_phone': contactPhone,
     };
 
+    final token = state.token!;
     try {
-      await api.postListing(body, state.token ?? '');
-    } catch (_) {
-      // Demo: simulate success
-    }
+      final res = await api.postListing(body, token);
+      final listing = res['listing'] as Map<String, dynamic>?;
+      final listingId = listing?['id']?.toString();
+      final orderId = res['order_id'];
 
-    if (!mounted) return;
-    setState(() => _loading = false);
-    _showSuccess();
+      String? imageError;
+      if (listingId != null && _images.isNotEmpty) {
+        try {
+          await api.uploadListingImages(listingId, _images, token);
+        } catch (e) {
+          imageError = e.toString().replaceFirst('Exception: ', '');
+        }
+      }
+
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _showSuccess(pendingPayment: orderId != null, imageError: imageError);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _snack(e.toString().replaceFirst('Exception: ', ''));
+    }
   }
 
   void _snack(String msg) {
@@ -101,7 +165,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
     ));
   }
 
-  void _showSuccess() {
+  void _showSuccess({bool pendingPayment = false, String? imageError}) {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -127,10 +191,19 @@ class _PostAdScreenState extends State<PostAdScreen> {
                   style: GoogleFonts.spectral(
                       fontSize: 20, fontWeight: FontWeight.w700, color: rc.ink)),
               const SizedBox(height: 8),
-              Text(S.get('adPostedHint'),
+              Text(
+                  pendingPayment
+                      ? "E'lon saqlandi. U ro'yxatda ko'rinishi uchun joylashtirish to'lovini amalga oshiring (Profil → To'lovlar tarixi)."
+                      : S.get('adPostedHint'),
                   textAlign: TextAlign.center,
                   style: GoogleFonts.hankenGrotesk(
                       fontSize: 13, color: rc.muted, height: 1.5)),
+              if (imageError != null) ...[
+                const SizedBox(height: 8),
+                Text("Rasmlarni yuklashda xatolik: $imageError",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.hankenGrotesk(fontSize: 12, color: Colors.red)),
+              ],
               const SizedBox(height: 22),
               GestureDetector(
                 onTap: () {
@@ -189,7 +262,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                     onPickImages: _pickImages,
                     onRemoveImage: (i) => setState(() => _images.removeAt(i)),
                     titleCtrl: _titleCtrl,
-                    catId: _catId,
+                    category: _category,
                     onCatTap: () => _showCategorySheet(context),
                     rc: rc,
                   )
@@ -210,7 +283,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                         price: _priceCtrl.text,
                         currency: _currency,
                         location: _locationCtrl.text,
-                        category: _catId,
+                        category: _category,
                         isTop: _isTop,
                         onTopChanged: (v) => setState(() => _isTop = v),
                         rc: rc,
@@ -279,23 +352,23 @@ class _PostAdScreenState extends State<PostAdScreen> {
                 style: GoogleFonts.spectral(
                     fontSize: 18, fontWeight: FontWeight.w700, color: rc.ink)),
             const SizedBox(height: 14),
-            ...kCategories.map((c) => GestureDetector(
-              onTap: () { setState(() => _catId = c.id); Navigator.pop(context); },
+            ..._categories.map((c) => GestureDetector(
+              onTap: () { setState(() => _category = c); Navigator.pop(context); },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: _catId == c.id ? cAccent.withValues(alpha: 0.08) : rc.bg,
+                  color: _category?.id == c.id ? cAccent.withValues(alpha: 0.08) : rc.bg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _catId == c.id ? cAccent : rc.line),
+                  border: Border.all(color: _category?.id == c.id ? cAccent : rc.line),
                 ),
                 child: Row(
                   children: [
-                    Text(c.emoji, style: const TextStyle(fontSize: 20)),
+                    Text(c.icon, style: const TextStyle(fontSize: 20)),
                     const SizedBox(width: 12),
-                    Text(c.name, style: GoogleFonts.hankenGrotesk(
+                    Text(c.nameUz, style: GoogleFonts.hankenGrotesk(
                         fontSize: 14, fontWeight: FontWeight.w600,
-                        color: _catId == c.id ? cAccent : rc.ink)),
+                        color: _category?.id == c.id ? cAccent : rc.ink)),
                   ],
                 ),
               ),
@@ -374,17 +447,16 @@ class _Step1 extends StatelessWidget {
   final VoidCallback onPickImages;
   final ValueChanged<int> onRemoveImage;
   final TextEditingController titleCtrl;
-  final String catId;
+  final Category? category;
   final VoidCallback onCatTap;
   final RC rc;
   const _Step1({
     required this.images, required this.onPickImages, required this.onRemoveImage,
-    required this.titleCtrl, required this.catId, required this.onCatTap, required this.rc,
+    required this.titleCtrl, required this.category, required this.onCatTap, required this.rc,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cat = kCategories.firstWhere((c) => c.id == catId, orElse: () => kCategories.first);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -460,9 +532,9 @@ class _Step1 extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Text(cat.emoji, style: const TextStyle(fontSize: 18)),
+                Text(category?.icon ?? '📦', style: const TextStyle(fontSize: 18)),
                 const SizedBox(width: 10),
-                Text(cat.name,
+                Text(category?.nameUz ?? "Kategoriya tanlanmagan",
                     style: GoogleFonts.hankenGrotesk(fontSize: 14, color: rc.ink)),
                 const Spacer(),
                 Icon(Icons.expand_more_rounded, color: rc.muted),
@@ -587,7 +659,8 @@ class _Step2 extends StatelessWidget {
 // ── Step 3: Preview ───────────────────────────────────────────
 
 class _Step3 extends StatelessWidget {
-  final String title, price, currency, location, category;
+  final String title, price, currency, location;
+  final Category? category;
   final bool isTop;
   final ValueChanged<bool> onTopChanged;
   final RC rc;
@@ -599,7 +672,6 @@ class _Step3 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cat = kCategories.firstWhere((c) => c.id == category, orElse: () => kCategories.first);
     final displayPrice = price.isNotEmpty
         ? (currency == 'USD' ? '\$$price' : '$price so\'m')
         : '—';
@@ -639,9 +711,9 @@ class _Step3 extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Text(cat.emoji, style: const TextStyle(fontSize: 16)),
+                  Text(category?.icon ?? '📦', style: const TextStyle(fontSize: 16)),
                   const SizedBox(width: 6),
-                  Text(cat.name, style: GoogleFonts.hankenGrotesk(
+                  Text(category?.nameUz ?? '', style: GoogleFonts.hankenGrotesk(
                       fontSize: 11, color: cAccent, fontWeight: FontWeight.w600)),
                 ],
               ),

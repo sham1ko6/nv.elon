@@ -33,6 +33,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   List<Listing> _results = [];
   bool _loading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -78,9 +79,13 @@ class _SearchScreenState extends State<SearchScreen> {
           break;
       }
 
-      if (mounted) setState(() { _results = filtered; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() { _loading = false; });
+      if (mounted) setState(() { _results = filtered; _loading = false; _error = null; });
+    } catch (e) {
+      if (mounted) setState(() {
+        _loading = false;
+        _results = [];
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 
@@ -236,7 +241,17 @@ class _SearchScreenState extends State<SearchScreen> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: cAccent))
-                  : _results.isEmpty
+                  : _error != null
+                      ? Center(
+                          child: REmptyState(
+                            icon: Icons.wifi_off_rounded,
+                            title: 'Ulanishda xatolik',
+                            subtitle: _error!,
+                            actionLabel: 'Qayta urinish',
+                            onAction: _search,
+                          ),
+                        )
+                      : _results.isEmpty
                       ? _Empty(rc: rc)
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(vertical: 8),
